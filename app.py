@@ -9,6 +9,7 @@ from fastapi.templating import Jinja2Templates
 from utils.metadata import get_metadata
 from utils.video import extract_frames
 from utils.report import generate_report
+from utils.ai_detection import analyze_frames_for_deepfake
 
 app = FastAPI()
 
@@ -72,11 +73,20 @@ async def analyze(
     try:
         metadata = get_metadata(path)
         frame_data = extract_frames(path, upload_id)
+
+        # Run the AI classifier on the frames already saved as thumbnails
+        # (no need to re-read the video — these JPGs are already on disk).
+        sample_paths = [
+            f"outputs/frames/{name}" for name in frame_data.get("samples", [])
+        ]
+        ai_result = analyze_frames_for_deepfake(sample_paths)
+
         report = generate_report(
             metadata,
             "Transcription disabled",
             frame_data,
-            video_path=path
+            video_path=path,
+            ai_result=ai_result
         )
     finally:
         # The original video isn't needed after frames are extracted —
