@@ -7,10 +7,34 @@
 
 <h1>Deepfake Newsroom MVP</h1>
 
-<form>
-    <input type="file">
+<form id="uploadForm">
+    <input type="file" id="videoFile">
     <button type="submit">Analyze</button>
 </form>
+
+<pre id="result"></pre>
+
+<script>
+document.getElementById("uploadForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+
+    const fd = new FormData();
+    fd.append(
+        "file",
+        document.getElementById("videoFile").files[0]
+    );
+
+    const r = await fetch("/analyze", {
+        method: "POST",
+        body: fd
+    });
+
+    const data = await r.json();
+
+    document.getElementById("result").textContent =
+        JSON.stringify(data, null, 2);
+});
+</script>
 
 </body>
 </html>
