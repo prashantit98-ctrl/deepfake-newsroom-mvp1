@@ -7,21 +7,30 @@
 
         body{
             font-family: Arial, sans-serif;
-            max-width: 900px;
-            margin: 40px auto;
-            padding: 20px;
-            background:#f5f7fb;
+            background:#f4f6f9;
+            margin:0;
+            padding:40px;
         }
 
-        .card{
+        .container{
+            max-width:1000px;
+            margin:auto;
+        }
+
+        .header{
             background:white;
-            padding:30px;
+            padding:25px;
             border-radius:12px;
             box-shadow:0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom:20px;
         }
 
-        h1{
-            margin-top:0;
+        .upload-box{
+            background:white;
+            padding:25px;
+            border-radius:12px;
+            box-shadow:0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom:20px;
         }
 
         button{
@@ -31,57 +40,118 @@
             padding:10px 20px;
             border-radius:8px;
             cursor:pointer;
+            font-size:16px;
         }
 
         button:hover{
             background:#1d4ed8;
         }
 
-        #result{
+        .metrics{
+            display:flex;
+            gap:15px;
             margin-top:20px;
-            padding:20px;
-            background:#f8fafc;
-            border-radius:8px;
-            white-space:pre-wrap;
+            flex-wrap:wrap;
         }
 
-        .status{
+        .card{
+            background:white;
+            padding:20px;
+            border-radius:12px;
+            box-shadow:0 2px 10px rgba(0,0,0,0.1);
+            flex:1;
+            min-width:220px;
+        }
+
+        .card h3{
+            margin:0;
+            color:#666;
+            font-size:15px;
+        }
+
+        .card h2{
+            margin-top:10px;
+        }
+
+        #status{
             margin-top:15px;
             color:#666;
         }
 
+        #report{
+            background:white;
+            padding:20px;
+            border-radius:12px;
+            box-shadow:0 2px 10px rgba(0,0,0,0.1);
+            margin-top:20px;
+            white-space:pre-wrap;
+        }
+
     </style>
+
 </head>
 
 <body>
 
-<div class="card">
+<div class="container">
 
-    <h1>🕵️ Deepfake Newsroom MVP</h1>
+    <div class="header">
+        <h1>🕵️ Deepfake Newsroom MVP</h1>
+        <p>
+            Upload a video and run a verification scan.
+        </p>
+    </div>
 
-    <p>
-        Upload a video and run an automated verification scan.
-    </p>
+    <div class="upload-box">
 
-    <form id="uploadForm">
+        <form id="uploadForm">
 
-        <input type="file" id="videoFile">
+            <input
+                type="file"
+                id="videoFile"
+                required
+            >
 
-        <button type="submit">
-            Analyze Video
-        </button>
+            <button type="submit">
+                Analyze Video
+            </button>
 
-    </form>
+        </form>
 
-    <div class="status" id="status"></div>
+        <div id="status"></div>
 
-    <div id="result"></div>
+    </div>
+
+    <div class="metrics">
+
+        <div class="card">
+            <h3>Risk Level</h3>
+            <h2 id="risk">-</h2>
+        </div>
+
+        <div class="card">
+            <h3>Total Frames</h3>
+            <h2 id="totalFrames">-</h2>
+        </div>
+
+        <div class="card">
+            <h3>Saved Frames</h3>
+            <h2 id="savedFrames">-</h2>
+        </div>
+
+    </div>
+
+    <div id="report">
+        Upload a video to begin analysis.
+    </div>
 
 </div>
 
 <script>
 
-document.getElementById("uploadForm").addEventListener(
+document
+.getElementById("uploadForm")
+.addEventListener(
     "submit",
     async (e)=>{
 
@@ -97,7 +167,7 @@ document.getElementById("uploadForm").addEventListener(
             document.getElementById("videoFile").files[0]
         );
 
-        let r = await fetch(
+        let response = await fetch(
             "/analyze",
             {
                 method:"POST",
@@ -105,20 +175,43 @@ document.getElementById("uploadForm").addEventListener(
             }
         );
 
-        let d = await r.json();
+        let data = await response.json();
+
+        let report =
+            data.report || {};
+
+        let frames =
+            report.frames_analyzed || {};
+
+        document.getElementById("risk").innerText =
+            report.risk_level || "LOW";
+
+        document.getElementById("totalFrames").innerText =
+            frames.total_frames || 0;
+
+        document.getElementById("savedFrames").innerText =
+            frames.saved_frames || 0;
+
+        document.getElementById("report").innerHTML =
+
+            "<b>File:</b> "
+            + data.filename
+            + "<br><br>"
+
+            + "<b>Status:</b> "
+            + (report.status || "Completed")
+            + "<br><br>"
+
+            + "<b>Sample Frames:</b><br>"
+            + JSON.stringify(
+                frames.samples || [],
+                null,
+                2
+            );
 
         document.getElementById("status").innerHTML =
             "Analysis complete";
 
-        document.getElementById("result").innerHTML = `
-            <h3>Report</h3>
-
-            <p><b>File:</b> ${d.filename}</p>
-
-            <p><b>Status:</b> ${d.status}</p>
-
-            <pre>${JSON.stringify(d.report, null, 2)}</pre>
-        `;
     }
 );
 
