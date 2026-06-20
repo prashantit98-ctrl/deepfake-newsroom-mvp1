@@ -351,26 +351,130 @@
         gap: 8px;
     }
 
-    .frame-tag{
-        background: var(--panel-raised);
-        border: 1px solid var(--border);
-        color: var(--text-dim);
-        padding: 7px 12px;
-        border-radius: 6px;
-        font-family: var(--mono);
-        font-size: 12px;
-        transition: border-color 0.15s, color 0.15s;
+    .frame-list{
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+        gap: 10px;
     }
 
-    .frame-tag:hover{
+    .frame-thumb{
+        position: relative;
+        aspect-ratio: 1;
+        border-radius: 8px;
+        overflow: hidden;
+        border: 1px solid var(--border);
+        background: var(--panel-raised);
+        cursor: pointer;
+        padding: 0;
+        transition: border-color 0.15s, transform 0.15s;
+    }
+
+    .frame-thumb img{
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
+
+    .frame-thumb::after{
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-radius: 8px;
+        box-shadow: inset 0 0 0 1px transparent;
+        transition: box-shadow 0.15s;
+    }
+
+    .frame-thumb:hover{
         border-color: var(--signal-dim);
-        color: var(--signal);
+        transform: translateY(-2px);
+    }
+
+    .frame-thumb:hover::after{
+        box-shadow: inset 0 0 0 1px rgba(94,234,212,0.4), 0 0 18px rgba(94,234,212,0.25);
+    }
+
+    .frame-thumb .frame-label{
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--text);
+        background: linear-gradient(to top, rgba(0,0,0,0.75), transparent);
+        padding: 14px 6px 4px;
+        text-align: center;
+        letter-spacing: 0.02em;
     }
 
     .frames-empty{
         font-size: 13px;
         color: var(--text-faint);
         font-family: var(--mono);
+        grid-column: 1 / -1;
+    }
+
+    /* ---------- Lightbox ---------- */
+
+    .lightbox{
+        position: fixed;
+        inset: 0;
+        background: rgba(5,8,12,0.92);
+        backdrop-filter: blur(4px);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 100;
+        padding: 40px;
+    }
+
+    .lightbox.open{
+        display: flex;
+    }
+
+    .lightbox img{
+        max-width: min(90vw, 720px);
+        max-height: 80vh;
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        box-shadow: 0 0 60px rgba(94,234,212,0.15);
+    }
+
+    .lightbox-close{
+        position: absolute;
+        top: 28px;
+        right: 32px;
+        background: var(--panel-raised);
+        border: 1px solid var(--border);
+        color: var(--text);
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        font-family: var(--mono);
+        font-size: 16px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: border-color 0.15s, color 0.15s;
+    }
+
+    .lightbox-close:hover{
+        border-color: var(--signal-dim);
+        color: var(--signal);
+    }
+
+    .lightbox-caption{
+        position: absolute;
+        bottom: 32px;
+        left: 0;
+        right: 0;
+        text-align: center;
+        font-family: var(--mono);
+        font-size: 12px;
+        color: var(--text-dim);
+        letter-spacing: 0.04em;
     }
 
     /* ---------- Responsive ---------- */
@@ -479,6 +583,12 @@
 
 </div>
 
+<div class="lightbox" id="lightbox">
+    <button class="lightbox-close" id="lightboxClose" aria-label="Close">✕</button>
+    <img id="lightboxImg" src="" alt="Extracted frame, full size">
+    <div class="lightbox-caption" id="lightboxCaption"></div>
+</div>
+
 <script>
 
 document
@@ -560,19 +670,26 @@ document
 
             let html = "";
 
-            const samples =
-                frames.samples || [];
+            const sampleUrls =
+                frames.sample_urls || [];
 
-            if(samples.length === 0){
+            if(sampleUrls.length === 0){
 
                 html =
                     '<span class="frames-empty">No sample frames available.</span>';
 
             }else{
 
-                samples.forEach(frame => {
+                sampleUrls.forEach(url => {
 
-                    html += `<div class="frame-tag">${frame}</div>`;
+                    const label = url.split("/").pop();
+
+                    html += `
+                        <button class="frame-thumb" data-url="${url}" data-label="${label}">
+                            <img src="${url}" alt="Extracted frame ${label}" loading="lazy">
+                            <span class="frame-label">${label}</span>
+                        </button>
+                    `;
 
                 });
 
@@ -596,6 +713,57 @@ document
 
         }
 
+    }
+);
+
+// ---------- Lightbox ----------
+
+const lightbox = document.getElementById("lightbox");
+const lightboxImg = document.getElementById("lightboxImg");
+const lightboxCaption = document.getElementById("lightboxCaption");
+const lightboxClose = document.getElementById("lightboxClose");
+
+document
+.getElementById("frameList")
+.addEventListener(
+    "click",
+    (e) => {
+
+        const thumb = e.target.closest(".frame-thumb");
+
+        if(!thumb){
+            return;
+        }
+
+        lightboxImg.src = thumb.dataset.url;
+        lightboxCaption.innerText = thumb.dataset.label;
+        lightbox.classList.add("open");
+
+    }
+);
+
+function closeLightbox(){
+    lightbox.classList.remove("open");
+    lightboxImg.src = "";
+}
+
+lightboxClose.addEventListener("click", closeLightbox);
+
+lightbox.addEventListener(
+    "click",
+    (e) => {
+        if(e.target === lightbox){
+            closeLightbox();
+        }
+    }
+);
+
+document.addEventListener(
+    "keydown",
+    (e) => {
+        if(e.key === "Escape"){
+            closeLightbox();
+        }
     }
 );
 
