@@ -34,11 +34,9 @@ async def analyze(file: UploadFile = File(...)):
 
     frame_data = extract_frames(path)
 
-    transcript = "Transcription disabled"
-
     report = generate_report(
         metadata,
-        transcript,
+        "Transcription disabled",
         frame_data
     )
 
