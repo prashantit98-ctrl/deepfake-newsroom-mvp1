@@ -12,27 +12,34 @@
     <button type="submit">Analyze</button>
 </form>
 
+<h2>Result</h2>
 <pre id="result"></pre>
 
 <script>
 document.getElementById("uploadForm").addEventListener("submit", async (e) => {
+
     e.preventDefault();
 
-    const fd = new FormData();
+    let fd = new FormData();
+
     fd.append(
         "file",
         document.getElementById("videoFile").files[0]
     );
 
-    const r = await fetch("/analyze", {
-        method: "POST",
-        body: fd
-    });
+    let r = await fetch(
+        "/analyze",
+        {
+            method: "POST",
+            body: fd
+        }
+    );
 
-    const data = await r.json();
+    let d = await r.json();
 
     document.getElementById("result").textContent =
-        JSON.stringify(data, null, 2);
+        JSON.stringify(d, null, 2);
+
 });
 </script>
 
