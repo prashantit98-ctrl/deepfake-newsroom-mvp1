@@ -24,3 +24,10 @@ async def analyze_video(file: UploadFile = File(...)):
     transcript = transcribe_audio(path)
     frames = extract_frames(path)
     return generate_report(metadata, transcript, frames)
+    import uvicorn
+
+if __name__ == "__main__":
+    uvicorn.run(
+        "app:app",
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", 8000))
