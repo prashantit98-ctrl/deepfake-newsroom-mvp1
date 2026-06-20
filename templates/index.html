@@ -511,7 +511,7 @@
     <div class="header">
         <div class="eyebrow"><span class="dot"></span>Authenticity Scanner</div>
         <h1>🕵️ Deepfake Newsroom MVP</h1>
-        <p>Upload a video. We extract key frames and run a verification scan to flag signs of manipulation.</p>
+        <p>Upload a video. We extract key frames and run heuristic checks (metadata, compression, frame consistency) that can flag editing signals. This is screening, not AI-based deepfake detection — always confirm with manual review.</p>
     </div>
 
     <div class="upload-box" id="uploadBox">
@@ -561,7 +561,7 @@
 
     <div class="report">
 
-        <h2>Verification Summary</h2>
+        <h2>Heuristic Screening Report</h2>
 
         <p><strong>File</strong><span id="filename">—</span></p>
 
