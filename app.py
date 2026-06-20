@@ -5,6 +5,7 @@ import os
 
 from utils.metadata import get_metadata
 from utils.video import extract_frames
+from utils.report import generate_report
 
 app = FastAPI()
 
@@ -31,14 +32,18 @@ async def analyze(file: UploadFile = File(...)):
 
     metadata = get_metadata(path)
 
-    try:
-        frame_count = extract_frames(path)
-    except Exception as e:
-        frame_count = f"Error: {str(e)}"
+    frame_data = extract_frames(path)
+
+    transcript = "Transcription disabled"
+
+    report = generate_report(
+        metadata,
+        transcript,
+        frame_data
+    )
 
     return {
         "filename": file.filename,
-        "metadata_found": len(metadata) > 0,
-        "frames_processed": frame_count,
+        "report": report,
         "status": "analysis complete"
     }
