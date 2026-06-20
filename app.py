@@ -9,13 +9,23 @@ from utils.report import generate_report
 
 app = FastAPI()
 
-templates = Jinja2Templates(directory="templates")
+templates = Jinja2Templates(
+    directory="templates"
+)
 
-os.makedirs("uploads", exist_ok=True)
+os.makedirs(
+    "uploads",
+    exist_ok=True
+)
 
 
-@app.get("/", response_class=HTMLResponse)
-async def home(request: Request):
+@app.get(
+    "/",
+    response_class=HTMLResponse
+)
+async def home(
+    request: Request
+):
     return templates.TemplateResponse(
         request=request,
         name="index.html"
@@ -23,16 +33,28 @@ async def home(request: Request):
 
 
 @app.post("/analyze")
-async def analyze(file: UploadFile = File(...)):
+async def analyze(
+    file: UploadFile = File(...)
+):
 
-    path = f"uploads/{file.filename}"
+    path = (
+        f"uploads/{file.filename}"
+    )
 
-    with open(path, "wb") as f:
-        f.write(await file.read())
+    with open(
+        path,
+        "wb"
+    ) as f:
+
+        f.write(
+            await file.read()
+        )
 
     metadata = get_metadata(path)
 
-    frame_data = extract_frames(path)
+    frame_data = extract_frames(
+        path
+    )
 
     report = generate_report(
         metadata,
