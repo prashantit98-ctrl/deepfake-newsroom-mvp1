@@ -343,6 +343,53 @@
         color: var(--text-dim);
     }
 
+    .ai-block{
+        margin-top: 14px;
+        background: var(--panel-raised);
+        border: 1px solid var(--border-soft);
+        border-radius: 8px;
+        padding: 16px;
+    }
+
+    .ai-block-header{
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--text-dim);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 10px;
+    }
+
+    .ai-dot{
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--text-faint);
+        display: inline-block;
+    }
+
+    .ai-dot.low{ background: var(--signal); box-shadow: 0 0 8px var(--signal); }
+    .ai-dot.medium{ background: var(--amber); box-shadow: 0 0 8px var(--amber); }
+    .ai-dot.high{ background: var(--rose); box-shadow: 0 0 8px var(--rose); }
+
+    .ai-block-body{
+        font-size: 13px;
+        color: var(--text-dim);
+        line-height: 1.6;
+    }
+
+    .ai-block-body .ai-prob{
+        font-family: var(--mono);
+        font-size: 22px;
+        font-weight: 700;
+        color: var(--text);
+        display: block;
+        margin-bottom: 4px;
+    }
+
     /* ---------- Frames ---------- */
 
     .frame-list{
@@ -511,7 +558,7 @@
     <div class="header">
         <div class="eyebrow"><span class="dot"></span>Authenticity Scanner</div>
         <h1>🕵️ Deepfake Newsroom MVP</h1>
-        <p>Upload a video. We extract key frames and run heuristic checks (metadata, compression, frame consistency) that can flag editing signals. This is screening, not AI-based deepfake detection — always confirm with manual review.</p>
+        <p>Upload a video. We extract key frames, run heuristic checks (metadata, compression, frame consistency), and pass frames through an AI classifier trained to spot manipulated faces. Combined results are a screening aid — always confirm with manual review.</p>
     </div>
 
     <div class="upload-box" id="uploadBox">
@@ -561,12 +608,20 @@
 
     <div class="report">
 
-        <h2>Heuristic Screening Report</h2>
+        <h2>Screening Report</h2>
 
         <p><strong>File</strong><span id="filename">—</span></p>
 
         <div class="summary" id="summary">
             Upload a video to begin analysis.
+        </div>
+
+        <div class="ai-block" id="aiBlock" style="display:none;">
+            <div class="ai-block-header">
+                <span class="ai-dot" id="aiDot"></span>
+                <span>AI Classifier Result</span>
+            </div>
+            <div class="ai-block-body" id="aiBlockBody"></div>
         </div>
 
     </div>
@@ -652,6 +707,37 @@ document
             document.getElementById("summary").innerText =
                 report.summary ||
                 "No summary generated.";
+
+            const aiBlock = document.getElementById("aiBlock");
+            const aiBlockBody = document.getElementById("aiBlockBody");
+            const aiDot = document.getElementById("aiDot");
+            const ai = report.ai_detection || {};
+
+            if(ai.ran){
+
+                aiBlock.style.display = "block";
+
+                const pct = Math.round((ai.fake_probability || 0) * 100);
+
+                let level = "low";
+                if(pct >= 70){ level = "high"; }
+                else if(pct >= 40){ level = "medium"; }
+
+                aiDot.className = "ai-dot " + level;
+
+                aiBlockBody.innerHTML = `
+                    <span class="ai-prob">${pct}% avg fake probability</span>
+                    Across ${ai.frames_analyzed || 0} sampled frames (peak ${Math.round((ai.max_frame_fake_probability||0)*100)}%).
+                    ${ai.note || ""}
+                `;
+
+            }else{
+
+                aiBlock.style.display = "block";
+                aiDot.className = "ai-dot";
+                aiBlockBody.innerText = ai.note || "AI detection was not run for this analysis.";
+
+            }
 
             const riskCard =
                 document.getElementById("riskCard");
