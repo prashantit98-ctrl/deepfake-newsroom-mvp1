@@ -2,7 +2,9 @@ import cv2
 import os
 
 def extract_frames(video_path):
+
     out = "outputs/frames"
+
     os.makedirs(out, exist_ok=True)
 
     cap = cv2.VideoCapture(video_path)
@@ -11,16 +13,25 @@ def extract_frames(video_path):
     saved = []
 
     while True:
+
         ok, frame = cap.read()
 
         if not ok:
             break
 
         if count % 30 == 0:
-            filename = f"frame_{count}.jpg"
-            filepath = f"{out}/{filename}"
 
-            cv2.imwrite(filepath, frame)
+            filename = f"frame_{count}.jpg"
+
+            filepath = os.path.join(
+                out,
+                filename
+            )
+
+            cv2.imwrite(
+                filepath,
+                frame
+            )
 
             saved.append(filename)
 
