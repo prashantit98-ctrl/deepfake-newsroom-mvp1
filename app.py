@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, UploadFile, File
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
@@ -13,3 +13,10 @@ async def home(request: Request):
         request=request,
         name="index.html"
     )
+
+
+@app.post("/analyze")
+async def analyze(file: UploadFile = File(...)):
+    return {
+        "filename": file.filename
+    }
