@@ -94,18 +94,18 @@ def _check_edge_density_variance(frames):
     return float(np.std(densities))
 
 
-def generate_report(metadata, transcript, frames, video_path=None):
+def generate_report(metadata, transcript, frames, video_path=None, ai_result=None):
     """
-    Produces a heuristic screening report.
+    Produces a screening report combining:
+    1. Heuristic checks (metadata, compression, frame consistency, edge variance)
+    2. AI-based deepfake classification (if ai_result is provided)
 
-    IMPORTANT: this performs signal-based heuristic screening only.
-    It does NOT run any AI/ML deepfake detection model and cannot
-    reliably confirm whether a video has been manipulated. It looks
-    for secondary signals (metadata, compression, frame consistency,
-    edge variance) that *can* correlate with editing or re-encoding,
-    but plenty of real videos will trigger these too, and a well-made
-    fake may trigger none of them. Treat results as a starting point
-    for manual review, not a verdict.
+    IMPORTANT: the heuristic checks are signal-based only and do NOT
+    confirm manipulation on their own. The AI component (when available)
+    is a real pretrained classifier, but per its own model card it is
+    trained on a specific dataset and may not generalize to all
+    deepfake methods, especially newer ones. Treat the combined result
+    as a strong starting point for manual review, not a final verdict.
     """
 
     risk_score = 0
@@ -181,6 +181,50 @@ def generate_report(metadata, transcript, frames, video_path=None):
     else:
         findings.append("Pixel-level checks skipped (video file unavailable)")
 
+    # --- AI-based deepfake classification ---
+    ai_section = {
+        "ran": False,
+        "fake_probability": None,
+        "note": "AI detection not run for this analysis."
+    }
+
+    if ai_result and ai_result.get("available"):
+        if ai_result.get("error"):
+            ai_section["note"] = f"AI detection encountered an error: {ai_result['error']}"
+        else:
+            fake_probability = ai_result.get("fake_probability")
+            max_fake_probability = ai_result.get("max_frame_fake_probability")
+
+            ai_section = {
+                "ran": True,
+                "fake_probability": fake_probability,
+                "max_frame_fake_probability": max_fake_probability,
+                "frames_analyzed": ai_result.get("frames_analyzed"),
+                "note": "Pretrained ViT deepfake classifier, run per sampled frame and averaged."
+            }
+
+            if fake_probability is not None:
+                # AI signal carries real weight, but is capped so a single
+                # model's opinion doesn't *alone* push risk to HIGH —
+                # combined with heuristics for the final score.
+                ai_contribution = round(fake_probability * 60)
+                risk_score += ai_contribution
+
+                if fake_probability >= 0.7:
+                    findings.append(
+                        f"AI classifier flagged high deepfake probability (avg {fake_probability:.0%} across sampled frames)"
+                    )
+                elif fake_probability >= 0.4:
+                    findings.append(
+                        f"AI classifier flagged moderate deepfake probability (avg {fake_probability:.0%} across sampled frames)"
+                    )
+                else:
+                    findings.append(
+                        f"AI classifier found low deepfake probability (avg {fake_probability:.0%} across sampled frames)"
+                    )
+    elif ai_result and not ai_result.get("available"):
+        ai_section["note"] = ai_result.get("error", "AI detection unavailable.")
+
     risk_score = min(risk_score, 100)
 
     if risk_score <= 20:
@@ -192,17 +236,17 @@ def generate_report(metadata, transcript, frames, video_path=None):
 
     summary = (
         f"{total_frames} frames analyzed. {saved_frames} key frames extracted. "
-        f"{len(findings)} heuristic checks completed. "
-        "This is signal-based screening, not AI-based deepfake detection — "
-        "treat results as a starting point for manual review."
+        f"{len(findings)} checks completed. "
+        + ("AI deepfake classifier included. " if ai_section["ran"] else "")
+        + "Results are a screening aid, not a verdict — manual review still advised."
     )
 
     recommendation = (
-        "No strong heuristic red flags found. Manual review still advised for any "
-        "publication decision — this tool cannot confirm authenticity."
+        "No strong red flags found across heuristic or AI checks. Manual review still advised for any "
+        "publication decision — this tool cannot guarantee authenticity."
         if risk_level == "LOW"
         else
-        "One or more heuristic checks flagged unusual signals. Manual review strongly recommended "
+        "One or more checks flagged unusual signals. Manual review strongly recommended "
         "before drawing any conclusions."
     )
 
@@ -213,7 +257,8 @@ def generate_report(metadata, transcript, frames, video_path=None):
         "metadata_present": metadata_present,
         "frames_analyzed": frames,
         "findings": findings,
+        "ai_detection": ai_section,
         "summary": summary,
         "recommendation": recommendation,
-        "disclaimer": "Heuristic screening only — not an AI deepfake detector. Results are not a verdict."
+        "disclaimer": "Combines heuristic screening with an AI classifier. Neither confirms authenticity with certainty — treat as a screening aid, not a verdict."
     }
