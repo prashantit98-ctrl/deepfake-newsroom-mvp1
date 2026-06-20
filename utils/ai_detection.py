@@ -1,4 +1,5 @@
 import os
+from PIL import Image
 from huggingface_hub import InferenceClient
 from huggingface_hub.errors import HfHubHTTPError
 
@@ -13,24 +14,22 @@ def _get_client():
     )
 
 
-def _query_model(image_bytes):
+def _query_model(image_path):
     """
     Sends one image to the Hugging Face model via the current
-    huggingface_hub InferenceClient (the old raw api-inference.huggingface.co
-    REST endpoint was deprecated in favor of this client/router setup).
+    huggingface_hub InferenceClient.
 
-    The client already retries automatically while a free-tier model is
-    "cold starting" (loading after being idle), so we don't need to
-    hand-roll that retry loop anymore.
+    We pass a PIL Image (not raw bytes) because the API needs to know
+    the content type — raw bytes alone don't carry that information
+    and the request gets rejected as a bad request.
 
     Returns a list like:
     [{"label": "Deepfake", "score": 0.91}, {"label": "Realism", "score": 0.09}]
     """
     client = _get_client()
-    result = client.image_classification(image_bytes, model=MODEL_ID)
+    image = Image.open(image_path).convert("RGB")
+    result = client.image_classification(image, model=MODEL_ID)
 
-    # result is a list of ImageClassificationOutputElement objects,
-    # each with .label and .score — normalize to plain dicts.
     return [{"label": r.label, "score": r.score} for r in result]
 
 
@@ -59,11 +58,8 @@ def analyze_frames_for_deepfake(frame_paths):
         if not os.path.exists(path):
             continue
 
-        with open(path, "rb") as f:
-            image_bytes = f.read()
-
         try:
-            result = _query_model(image_bytes)
+            result = _query_model(path)
         except HfHubHTTPError as e:
             frame_results.append({
                 "frame": os.path.basename(path),
