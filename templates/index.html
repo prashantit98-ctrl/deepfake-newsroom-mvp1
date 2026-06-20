@@ -1,151 +1,403 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Deepfake Newsroom MVP</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deepfake Newsroom MVP</title>
 
-    <style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-        *{
-            box-sizing:border-box;
-        }
+<style>
 
-        body{
-            font-family:Arial, sans-serif;
-            background:#f4f6f9;
-            margin:0;
-            padding:40px;
-        }
+    :root{
+        --bg:           #0a0e14;
+        --panel:        #0f161f;
+        --panel-raised: #131c27;
+        --border:       #1c2733;
+        --border-soft:  #161f2a;
+        --text:         #e2e8f0;
+        --text-dim:     #7d8b9c;
+        --text-faint:   #4b5868;
+        --signal:       #5eead4;
+        --signal-dim:   #2dd4bf;
+        --amber:        #fbbf24;
+        --rose:         #fb7185;
+        --mono:         'JetBrains Mono', monospace;
+        --sans:         'Inter', sans-serif;
+    }
 
-        .container{
-            max-width:1100px;
-            margin:auto;
-        }
+    *{
+        box-sizing: border-box;
+    }
 
-        .header{
-            background:white;
-            padding:30px;
-            border-radius:12px;
-            box-shadow:0 2px 10px rgba(0,0,0,0.08);
-            margin-bottom:20px;
-        }
+    html{
+        scroll-behavior: smooth;
+    }
 
-        .header h1{
-            margin:0;
-        }
+    body{
+        font-family: var(--sans);
+        background: var(--bg);
+        background-image:
+            radial-gradient(ellipse 80% 50% at 50% -10%, rgba(94,234,212,0.07), transparent),
+            repeating-linear-gradient(0deg, rgba(255,255,255,0.012) 0px, rgba(255,255,255,0.012) 1px, transparent 1px, transparent 3px);
+        color: var(--text);
+        margin: 0;
+        padding: 48px 24px 80px;
+        min-height: 100vh;
+    }
 
-        .header p{
-            color:#666;
-            margin-top:10px;
-        }
+    .container{
+        max-width: 1080px;
+        margin: auto;
+    }
 
-        .upload-box{
-            background:white;
-            padding:25px;
-            border-radius:12px;
-            box-shadow:0 2px 10px rgba(0,0,0,0.08);
-            margin-bottom:20px;
-        }
+    /* ---------- Header ---------- */
 
-        input[type="file"]{
-            margin-right:15px;
-        }
+    .header{
+        margin-bottom: 28px;
+        padding-bottom: 24px;
+        border-bottom: 1px solid var(--border-soft);
+    }
 
-        button{
-            background:#2563eb;
-            color:white;
-            border:none;
-            padding:12px 20px;
-            border-radius:8px;
-            cursor:pointer;
-            font-size:15px;
-        }
+    .header .eyebrow{
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--signal-dim);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 14px;
+    }
 
-        button:hover{
-            background:#1d4ed8;
-        }
+    .header .eyebrow .dot{
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--signal);
+        box-shadow: 0 0 8px var(--signal);
+        animation: pulse 2.4s ease-in-out infinite;
+    }
 
-        #status{
-            margin-top:15px;
-            color:#555;
-        }
+    @keyframes pulse{
+        0%, 100%{ opacity: 1; }
+        50%{ opacity: 0.35; }
+    }
 
-        .metrics{
-            display:grid;
-            grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
-            gap:20px;
-            margin-bottom:20px;
-        }
+    .header h1{
+        margin: 0;
+        font-size: 30px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+        color: #f8fafc;
+    }
 
-        .card{
-            background:white;
-            padding:20px;
-            border-radius:12px;
-            box-shadow:0 2px 10px rgba(0,0,0,0.08);
-        }
+    .header p{
+        color: var(--text-dim);
+        margin: 10px 0 0;
+        font-size: 15px;
+        max-width: 560px;
+        line-height: 1.55;
+    }
 
-        .card h3{
-            margin:0;
-            color:#666;
-            font-size:14px;
-        }
+    /* ---------- Upload ---------- */
 
-        .card h2{
-            margin-top:10px;
-            margin-bottom:0;
-        }
+    .upload-box{
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 24px;
+        margin-bottom: 20px;
+        position: relative;
+        overflow: hidden;
+    }
 
-        .risk-low{
-            color:#16a34a;
-        }
+    .upload-box.scanning::before{
+        content: "";
+        position: absolute;
+        top: 0;
+        left: -30%;
+        width: 30%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(94,234,212,0.08), transparent);
+        animation: sweep 1.6s linear infinite;
+    }
 
-        .risk-medium{
-            color:#d97706;
-        }
+    @keyframes sweep{
+        from{ left: -30%; }
+        to{ left: 100%; }
+    }
 
-        .risk-high{
-            color:#dc2626;
-        }
+    #uploadForm{
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        flex-wrap: wrap;
+    }
 
-        .report{
-            background:white;
-            padding:25px;
-            border-radius:12px;
-            box-shadow:0 2px 10px rgba(0,0,0,0.08);
-            margin-bottom:20px;
-        }
+    .file-input-wrap{
+        position: relative;
+        display: inline-flex;
+    }
 
-        .report h2{
-            margin-top:0;
-        }
+    input[type="file"]{
+        font-family: var(--sans);
+        font-size: 13px;
+        color: var(--text-dim);
+    }
 
-        .summary{
-            background:#f8fafc;
-            padding:15px;
-            border-radius:8px;
-            margin-top:15px;
-        }
+    input[type="file"]::file-selector-button{
+        font-family: var(--mono);
+        font-size: 12px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        background: var(--panel-raised);
+        color: var(--text);
+        border: 1px solid var(--border);
+        padding: 9px 16px;
+        border-radius: 6px;
+        cursor: pointer;
+        margin-right: 12px;
+        transition: border-color 0.15s, color 0.15s;
+    }
 
-        .frames{
-            background:white;
-            padding:25px;
-            border-radius:12px;
-            box-shadow:0 2px 10px rgba(0,0,0,0.08);
-        }
+    input[type="file"]::file-selector-button:hover{
+        border-color: var(--signal-dim);
+        color: var(--signal);
+    }
 
-        .frame-list{
-            display:flex;
-            flex-wrap:wrap;
-            gap:10px;
-        }
+    button[type="submit"]{
+        font-family: var(--mono);
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0.03em;
+        text-transform: uppercase;
+        background: var(--signal);
+        color: #06201c;
+        border: none;
+        padding: 11px 22px;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: box-shadow 0.15s, transform 0.15s, background 0.15s;
+        box-shadow: 0 0 0 rgba(94,234,212,0);
+    }
 
-        .frame-tag{
-            background:#eef2ff;
-            padding:8px 12px;
-            border-radius:20px;
-            font-size:13px;
-        }
+    button[type="submit"]:hover{
+        background: var(--signal-dim);
+        box-shadow: 0 0 24px rgba(94,234,212,0.35);
+    }
 
-    </style>
+    button[type="submit"]:active{
+        transform: scale(0.98);
+    }
+
+    button[type="submit"]:disabled{
+        opacity: 0.5;
+        cursor: not-allowed;
+        box-shadow: none;
+    }
+
+    #status{
+        margin-top: 16px;
+        font-family: var(--mono);
+        font-size: 12.5px;
+        color: var(--text-faint);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    #status .status-icon{
+        color: var(--text-faint);
+    }
+
+    #status.active .status-icon{
+        color: var(--signal);
+    }
+
+    #status.done .status-icon{
+        color: var(--signal);
+    }
+
+    /* ---------- Metrics ---------- */
+
+    .metrics{
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 14px;
+        margin-bottom: 20px;
+    }
+
+    .card{
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 18px 20px;
+        transition: border-color 0.3s;
+    }
+
+    .card h3{
+        margin: 0;
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--text-faint);
+        font-weight: 500;
+    }
+
+    .card h2{
+        margin: 10px 0 0;
+        font-family: var(--mono);
+        font-size: 26px;
+        font-weight: 700;
+        color: var(--text);
+        letter-spacing: -0.01em;
+    }
+
+    .card.risk-card{
+        position: relative;
+    }
+
+    .card.risk-card.risk-low{
+        border-color: rgba(94,234,212,0.3);
+        box-shadow: inset 0 0 24px rgba(94,234,212,0.04);
+    }
+
+    .card.risk-card.risk-medium{
+        border-color: rgba(251,191,36,0.35);
+        box-shadow: inset 0 0 24px rgba(251,191,36,0.05);
+    }
+
+    .card.risk-card.risk-high{
+        border-color: rgba(251,113,133,0.4);
+        box-shadow: inset 0 0 24px rgba(251,113,133,0.06);
+    }
+
+    .risk-low   #risk{ color: var(--signal); text-shadow: 0 0 16px rgba(94,234,212,0.5); }
+    .risk-medium #risk{ color: var(--amber); text-shadow: 0 0 16px rgba(251,191,36,0.5); }
+    .risk-high  #risk{ color: var(--rose); text-shadow: 0 0 16px rgba(251,113,133,0.5); }
+
+    /* ---------- Report ---------- */
+
+    .report, .frames{
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 24px;
+        margin-bottom: 20px;
+    }
+
+    .report h2, .frames h2{
+        margin: 0 0 16px;
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--text);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .report h2::before, .frames h2::before{
+        content: "";
+        width: 3px;
+        height: 14px;
+        background: var(--signal);
+        border-radius: 2px;
+        display: inline-block;
+    }
+
+    .report p{
+        font-size: 13.5px;
+        color: var(--text-dim);
+        margin: 0;
+    }
+
+    .report p strong{
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--text-faint);
+        font-weight: 500;
+        margin-right: 6px;
+    }
+
+    #filename{
+        font-family: var(--mono);
+        color: var(--text);
+    }
+
+    .summary{
+        background: var(--panel-raised);
+        border: 1px solid var(--border-soft);
+        border-left: 2px solid var(--signal-dim);
+        padding: 14px 16px;
+        border-radius: 6px;
+        margin-top: 14px;
+        font-size: 13.5px;
+        line-height: 1.6;
+        color: var(--text-dim);
+    }
+
+    /* ---------- Frames ---------- */
+
+    .frame-list{
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .frame-tag{
+        background: var(--panel-raised);
+        border: 1px solid var(--border);
+        color: var(--text-dim);
+        padding: 7px 12px;
+        border-radius: 6px;
+        font-family: var(--mono);
+        font-size: 12px;
+        transition: border-color 0.15s, color 0.15s;
+    }
+
+    .frame-tag:hover{
+        border-color: var(--signal-dim);
+        color: var(--signal);
+    }
+
+    .frames-empty{
+        font-size: 13px;
+        color: var(--text-faint);
+        font-family: var(--mono);
+    }
+
+    /* ---------- Responsive ---------- */
+
+    @media (max-width: 560px){
+        body{ padding: 28px 16px 60px; }
+        .header h1{ font-size: 24px; }
+        #uploadForm{ flex-direction: column; align-items: stretch; }
+        button[type="submit"]{ width: 100%; }
+    }
+
+    /* ---------- Reduced motion ---------- */
+
+    @media (prefers-reduced-motion: reduce){
+        .header .eyebrow .dot{ animation: none; }
+        .upload-box.scanning::before{ animation: none; }
+    }
+
+    /* ---------- Focus visibility ---------- */
+
+    button:focus-visible,
+    input:focus-visible{
+        outline: 2px solid var(--signal);
+        outline-offset: 2px;
+    }
+
+</style>
 </head>
 
 <body>
@@ -153,54 +405,52 @@
 <div class="container">
 
     <div class="header">
+        <div class="eyebrow"><span class="dot"></span>Authenticity Scanner</div>
         <h1>🕵️ Deepfake Newsroom MVP</h1>
-        <p>
-            Upload a video and run an automated authenticity and verification scan.
-        </p>
+        <p>Upload a video. We extract key frames and run a verification scan to flag signs of manipulation.</p>
     </div>
 
-    <div class="upload-box">
+    <div class="upload-box" id="uploadBox">
 
         <form id="uploadForm">
 
-            <input
-                type="file"
-                id="videoFile"
-                required
-            >
+            <div class="file-input-wrap">
+                <input type="file" id="videoFile" accept="video/*" required>
+            </div>
 
-            <button type="submit">
+            <button type="submit" id="submitBtn">
                 Analyze Video
             </button>
 
         </form>
 
         <div id="status">
-            Waiting for upload...
+            <span class="status-icon">○</span>
+            <span id="statusText">Waiting for upload</span>
         </div>
 
     </div>
 
     <div class="metrics">
 
-        <div class="card">
+        <div class="card risk-card" id="riskCard">
             <h3>Risk Level</h3>
-            <h2 id="risk">-</h2>
+            <h2 id="risk">—</h2>
         </div>
 
         <div class="card">
             <h3>Risk Score</h3>
-            <h2 id="score">-</h2>
+            <h2 id="score">—</h2>
         </div>
 
         <div class="card">
             <h3>Total Frames</h3>
-            <h2 id="totalFrames">-</h2>
+            <h2 id="totalFrames">—</h2>
         </div>
 
         <div class="card">
             <h3>Key Frames Saved</h3>
-            <h2 id="savedFrames">-</h2>
+            <h2 id="savedFrames">—</h2>
         </div>
 
     </div>
@@ -209,10 +459,7 @@
 
         <h2>Verification Summary</h2>
 
-        <p>
-            <strong>File:</strong>
-            <span id="filename">-</span>
-        </p>
+        <p><strong>File</strong><span id="filename">—</span></p>
 
         <div class="summary" id="summary">
             Upload a video to begin analysis.
@@ -224,11 +471,8 @@
 
         <h2>Extracted Key Frames</h2>
 
-        <div
-            class="frame-list"
-            id="frameList"
-        >
-            No frames analyzed yet.
+        <div class="frame-list" id="frameList">
+            <span class="frames-empty">No frames analyzed yet.</span>
         </div>
 
     </div>
@@ -245,8 +489,16 @@ document
 
         e.preventDefault();
 
-        document.getElementById("status").innerHTML =
-            "Analyzing video...";
+        const uploadBox = document.getElementById("uploadBox");
+        const statusEl = document.getElementById("status");
+        const statusText = document.getElementById("statusText");
+        const submitBtn = document.getElementById("submitBtn");
+
+        uploadBox.classList.add("scanning");
+        statusEl.classList.remove("done");
+        statusEl.classList.add("active");
+        statusText.innerText = "Analyzing video...";
+        submitBtn.disabled = true;
 
         const fd = new FormData();
 
@@ -255,84 +507,94 @@ document
             document.getElementById("videoFile").files[0]
         );
 
-        const response = await fetch(
-            "/analyze",
-            {
-                method:"POST",
-                body:fd
+        try{
+
+            const response = await fetch(
+                "/analyze",
+                {
+                    method:"POST",
+                    body:fd
+                }
+            );
+
+            const data = await response.json();
+
+            const report = data.report || {};
+
+            const frames =
+                report.frames_analyzed || {};
+
+            document.getElementById("filename").innerText =
+                data.filename || "—";
+
+            document.getElementById("risk").innerText =
+                report.risk_level || "LOW";
+
+            document.getElementById("score").innerText =
+                (report.risk_score || 0) + "/100";
+
+            document.getElementById("totalFrames").innerText =
+                frames.total_frames || 0;
+
+            document.getElementById("savedFrames").innerText =
+                frames.saved_frames || 0;
+
+            document.getElementById("summary").innerText =
+                report.summary ||
+                "No summary generated.";
+
+            const riskCard =
+                document.getElementById("riskCard");
+
+            riskCard.className = "card risk-card";
+
+            if(report.risk_level === "LOW"){
+                riskCard.classList.add("risk-low");
             }
-        );
+            else if(report.risk_level === "MEDIUM"){
+                riskCard.classList.add("risk-medium");
+            }
+            else{
+                riskCard.classList.add("risk-high");
+            }
 
-        const data = await response.json();
+            let html = "";
 
-        const report = data.report || {};
+            const samples =
+                frames.samples || [];
 
-        const frames =
-            report.frames_analyzed || {};
+            if(samples.length === 0){
 
-        document.getElementById("filename").innerText =
-            data.filename || "-";
+                html =
+                    '<span class="frames-empty">No sample frames available.</span>';
 
-        document.getElementById("risk").innerText =
-            report.risk_level || "LOW";
+            }else{
 
-        document.getElementById("score").innerText =
-            (report.risk_score || 0) + "/100";
+                samples.forEach(frame => {
 
-        document.getElementById("totalFrames").innerText =
-            frames.total_frames || 0;
+                    html += `<div class="frame-tag">${frame}</div>`;
 
-        document.getElementById("savedFrames").innerText =
-            frames.saved_frames || 0;
+                });
 
-        document.getElementById("summary").innerText =
-            report.summary ||
-            "No summary generated.";
+            }
 
-        const risk =
-            document.getElementById("risk");
+            document.getElementById("frameList")
+                .innerHTML = html;
 
-        risk.className = "";
+            statusText.innerText = "Analysis complete";
 
-        if(report.risk_level === "LOW"){
-            risk.classList.add("risk-low");
-        }
-        else if(report.risk_level === "MEDIUM"){
-            risk.classList.add("risk-medium");
-        }
-        else{
-            risk.classList.add("risk-high");
-        }
+        }catch(err){
 
-        let html = "";
+            statusText.innerText = "Analysis failed — check the file and try again.";
 
-        const samples =
-            frames.samples || [];
+        }finally{
 
-        if(samples.length === 0){
-
-            html =
-                "No sample frames available.";
-
-        }else{
-
-            samples.forEach(frame => {
-
-                html += `
-                    <div class="frame-tag">
-                        ${frame}
-                    </div>
-                `;
-
-            });
+            uploadBox.classList.remove("scanning");
+            statusEl.classList.remove("active");
+            statusEl.classList.add("done");
+            submitBtn.disabled = false;
 
         }
-
-        document.getElementById("frameList")
-            .innerHTML = html;
-
-        document.getElementById("status").innerHTML =
-            "Analysis complete";
 
     }
 );
