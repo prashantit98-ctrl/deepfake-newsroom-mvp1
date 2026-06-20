@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html><body>
+<h1>Newsroom Verification Tool</h1>
+<form id="uploadForm">
+<input type="file" id="videoFile">
+<button type="submit">Analyze</button>
+</form>
+<pre id="result"></pre>
+<script>
+document.getElementById("uploadForm").addEventListener("submit", async (e)=>{
+e.preventDefault();
+let fd=new FormData();
+fd.append("file", document.getElementById("videoFile").files[0]);
+let r=await fetch("/analyze",{method:"POST",body:fd});
+let d=await r.json();
+document.getElementById("result").textContent=JSON.stringify(d,null,2);
+});
+</script>
+</body></html>

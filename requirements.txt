@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+jinja2
+python-multipart
+openai-whisper
+ffmpeg-python
+opencv-python
+pillow
