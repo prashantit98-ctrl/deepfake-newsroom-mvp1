@@ -1,45 +1,37 @@
 import os
-import time
-import requests
+from huggingface_hub import InferenceClient
+from huggingface_hub.errors import HfHubHTTPError
 
-HF_API_URL = "https://api-inference.huggingface.co/models/prithivMLmods/Deep-Fake-Detector-v2-Model"
+MODEL_ID = "prithivMLmods/Deep-Fake-Detector-v2-Model"
 HF_TOKEN = os.environ.get("HF_API_TOKEN")
 
 
-def _query_model(image_bytes, retries=3):
+def _get_client():
+    return InferenceClient(
+        provider="hf-inference",
+        api_key=HF_TOKEN
+    )
+
+
+def _query_model(image_bytes):
     """
-    Sends one image to the Hugging Face Inference API and returns the
-    raw classification result, e.g.:
+    Sends one image to the Hugging Face model via the current
+    huggingface_hub InferenceClient (the old raw api-inference.huggingface.co
+    REST endpoint was deprecated in favor of this client/router setup).
+
+    The client already retries automatically while a free-tier model is
+    "cold starting" (loading after being idle), so we don't need to
+    hand-roll that retry loop anymore.
+
+    Returns a list like:
     [{"label": "Deepfake", "score": 0.91}, {"label": "Realism", "score": 0.09}]
-
-    Free-tier hosted models "cold start" if they haven't been called
-    recently — the first request can take 10-20s while it loads, and
-    the API responds with a 503 + estimated_time while that happens.
-    We retry a few times rather than failing immediately.
     """
-    headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+    client = _get_client()
+    result = client.image_classification(image_bytes, model=MODEL_ID)
 
-    for attempt in range(retries):
-        response = requests.post(
-            HF_API_URL,
-            headers=headers,
-            data=image_bytes,
-            timeout=30
-        )
-
-        if response.status_code == 200:
-            return response.json()
-
-        if response.status_code == 503:
-            # Model is loading — wait roughly as long as it says, then retry.
-            wait_time = response.json().get("estimated_time", 5)
-            time.sleep(min(wait_time, 15))
-            continue
-
-        # Any other error: stop retrying, surface it.
-        response.raise_for_status()
-
-    raise RuntimeError("Hugging Face model did not respond after retries (cold start took too long).")
+    # result is a list of ImageClassificationOutputElement objects,
+    # each with .label and .score — normalize to plain dicts.
+    return [{"label": r.label, "score": r.score} for r in result]
 
 
 def analyze_frames_for_deepfake(frame_paths):
@@ -72,6 +64,12 @@ def analyze_frames_for_deepfake(frame_paths):
 
         try:
             result = _query_model(image_bytes)
+        except HfHubHTTPError as e:
+            frame_results.append({
+                "frame": os.path.basename(path),
+                "error": f"Hugging Face API error: {e}"
+            })
+            continue
         except Exception as e:
             frame_results.append({
                 "frame": os.path.basename(path),
@@ -79,7 +77,6 @@ def analyze_frames_for_deepfake(frame_paths):
             })
             continue
 
-        # result looks like [{"label": "Deepfake", "score": 0.91}, {"label": "Realism", "score": 0.09}]
         fake_entry = next((r for r in result if r["label"].lower() == "deepfake"), None)
         fake_score = fake_entry["score"] if fake_entry else None
 
@@ -93,16 +90,19 @@ def analyze_frames_for_deepfake(frame_paths):
             fake_scores.append(fake_score)
 
     if not fake_scores:
+        # Surface the first real error we hit, instead of a generic message,
+        # so problems like this are easy to diagnose from the report alone.
+        first_error = next(
+            (r["error"] for r in frame_results if "error" in r),
+            "No frames could be analyzed."
+        )
         return {
             "available": True,
-            "error": "No frames could be analyzed.",
+            "error": first_error,
             "frame_results": frame_results,
             "fake_probability": None
         }
 
-    # Aggregate: average fake-probability across analyzed frames.
-    # A single suspicious frame can be noise; a consistently high
-    # average across many frames is a stronger signal.
     avg_fake_probability = sum(fake_scores) / len(fake_scores)
     max_fake_probability = max(fake_scores)
 
