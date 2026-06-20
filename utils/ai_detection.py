@@ -1,5 +1,4 @@
 import os
-from PIL import Image
 from huggingface_hub import InferenceClient
 from huggingface_hub.errors import HfHubHTTPError
 
@@ -19,16 +18,15 @@ def _query_model(image_path):
     Sends one image to the Hugging Face model via the current
     huggingface_hub InferenceClient.
 
-    We pass a PIL Image (not raw bytes) because the API needs to know
-    the content type — raw bytes alone don't carry that information
-    and the request gets rejected as a bad request.
+    The client wants binary bytes, a local file path, or a URL —
+    not a PIL Image object — so we pass the path string directly
+    and let the client handle reading and content-type detection.
 
     Returns a list like:
     [{"label": "Deepfake", "score": 0.91}, {"label": "Realism", "score": 0.09}]
     """
     client = _get_client()
-    image = Image.open(image_path).convert("RGB")
-    result = client.image_classification(image, model=MODEL_ID)
+    result = client.image_classification(image_path, model=MODEL_ID)
 
     return [{"label": r.label, "score": r.score} for r in result]
 
