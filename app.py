@@ -75,7 +75,8 @@ async def analyze(
         report = generate_report(
             metadata,
             "Transcription disabled",
-            frame_data
+            frame_data,
+            video_path=path
         )
     finally:
         # The original video isn't needed after frames are extracted —
