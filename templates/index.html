@@ -2,45 +2,126 @@
 <html>
 <head>
     <title>Deepfake Newsroom MVP</title>
+
+    <style>
+
+        body{
+            font-family: Arial, sans-serif;
+            max-width: 900px;
+            margin: 40px auto;
+            padding: 20px;
+            background:#f5f7fb;
+        }
+
+        .card{
+            background:white;
+            padding:30px;
+            border-radius:12px;
+            box-shadow:0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        h1{
+            margin-top:0;
+        }
+
+        button{
+            background:#2563eb;
+            color:white;
+            border:none;
+            padding:10px 20px;
+            border-radius:8px;
+            cursor:pointer;
+        }
+
+        button:hover{
+            background:#1d4ed8;
+        }
+
+        #result{
+            margin-top:20px;
+            padding:20px;
+            background:#f8fafc;
+            border-radius:8px;
+            white-space:pre-wrap;
+        }
+
+        .status{
+            margin-top:15px;
+            color:#666;
+        }
+
+    </style>
 </head>
+
 <body>
 
-<h1>Deepfake Newsroom MVP</h1>
+<div class="card">
 
-<form id="uploadForm">
-    <input type="file" id="videoFile">
-    <button type="submit">Analyze</button>
-</form>
+    <h1>🕵️ Deepfake Newsroom MVP</h1>
 
-<h2>Result</h2>
-<pre id="result"></pre>
+    <p>
+        Upload a video and run an automated verification scan.
+    </p>
+
+    <form id="uploadForm">
+
+        <input type="file" id="videoFile">
+
+        <button type="submit">
+            Analyze Video
+        </button>
+
+    </form>
+
+    <div class="status" id="status"></div>
+
+    <div id="result"></div>
+
+</div>
 
 <script>
-document.getElementById("uploadForm").addEventListener("submit", async (e) => {
 
-    e.preventDefault();
+document.getElementById("uploadForm").addEventListener(
+    "submit",
+    async (e)=>{
 
-    let fd = new FormData();
+        e.preventDefault();
 
-    fd.append(
-        "file",
-        document.getElementById("videoFile").files[0]
-    );
+        document.getElementById("status").innerHTML =
+            "Analyzing video...";
 
-    let r = await fetch(
-        "/analyze",
-        {
-            method: "POST",
-            body: fd
-        }
-    );
+        let fd = new FormData();
 
-    let d = await r.json();
+        fd.append(
+            "file",
+            document.getElementById("videoFile").files[0]
+        );
 
-    document.getElementById("result").textContent =
-        JSON.stringify(d, null, 2);
+        let r = await fetch(
+            "/analyze",
+            {
+                method:"POST",
+                body:fd
+            }
+        );
 
-});
+        let d = await r.json();
+
+        document.getElementById("status").innerHTML =
+            "Analysis complete";
+
+        document.getElementById("result").innerHTML = `
+            <h3>Report</h3>
+
+            <p><b>File:</b> ${d.filename}</p>
+
+            <p><b>Status:</b> ${d.status}</p>
+
+            <pre>${JSON.stringify(d.report, null, 2)}</pre>
+        `;
+    }
+);
+
 </script>
 
 </body>
