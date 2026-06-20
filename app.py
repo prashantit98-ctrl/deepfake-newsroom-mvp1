@@ -6,7 +6,6 @@ import uvicorn
 
 from utils.video import extract_frames
 from utils.metadata import get_metadata
-from utils.transcription import transcribe_audio
 from utils.report import generate_report
 
 app = FastAPI()
@@ -32,7 +31,10 @@ async def analyze_video(file: UploadFile = File(...)):
         f.write(await file.read())
 
     metadata = get_metadata(path)
-    transcript = transcribe_audio(path)
+
+    # Whisper temporarily disabled
+    transcript = "Transcription disabled"
+
     frames = extract_frames(path)
 
     return generate_report(
