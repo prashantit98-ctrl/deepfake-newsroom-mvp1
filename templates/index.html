@@ -209,6 +209,18 @@
         border-color: var(--signal-dim);
     }
 
+    .url-hint{
+        margin: 12px 0 0;
+        font-size: 12.5px;
+        line-height: 1.6;
+        color: var(--text-faint);
+    }
+
+    .url-hint strong{
+        color: var(--text-dim);
+        font-weight: 600;
+    }
+
     .file-input-wrap{
         position: relative;
         display: inline-flex;
@@ -657,7 +669,7 @@
             <input
                 type="url"
                 id="videoUrl"
-                placeholder="https://x.com/username/status/..."
+                placeholder="https://video.twimg.com/... (direct video link)"
                 required
             >
 
@@ -666,6 +678,12 @@
             </button>
 
         </form>
+
+        <p class="url-hint" id="urlHint" style="display:none;">
+            Tip: a regular tweet link often gets blocked by X. For the most reliable result,
+            right-click the video on X and choose <strong>"Copy video address"</strong>
+            (Chrome/Edge) or <strong>"Copy Video Link"</strong> (Firefox) — then paste that here.
+        </p>
 
         <div id="status">
             <span class="status-icon">○</span>
@@ -894,6 +912,7 @@ document.getElementById("fileTabBtn").addEventListener("click", () => {
     document.getElementById("urlTabBtn").classList.remove("active");
     document.getElementById("uploadForm").style.display = "flex";
     document.getElementById("urlForm").style.display = "none";
+    document.getElementById("urlHint").style.display = "none";
 });
 
 document.getElementById("urlTabBtn").addEventListener("click", () => {
@@ -901,6 +920,7 @@ document.getElementById("urlTabBtn").addEventListener("click", () => {
     document.getElementById("fileTabBtn").classList.remove("active");
     document.getElementById("urlForm").style.display = "flex";
     document.getElementById("uploadForm").style.display = "none";
+    document.getElementById("urlHint").style.display = "block";
 });
 
 // ---------- File upload submit ----------
