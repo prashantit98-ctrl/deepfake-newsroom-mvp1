@@ -735,8 +735,8 @@ document
                 aiDot.className = "ai-dot " + level;
 
                 aiBlockBody.innerHTML = `
-                    <span class="ai-prob">${pct}% avg fake probability</span>
-                    Across ${ai.frames_analyzed || 0} sampled frames (peak ${Math.round((ai.max_frame_fake_probability||0)*100)}%).
+                    <span class="ai-prob">${pct}% median fake probability</span>
+                    Across ${ai.frames_analyzed || 0} sampled frames (mean ${Math.round((ai.mean_frame_fake_probability||0)*100)}%, peak ${Math.round((ai.max_frame_fake_probability||0)*100)}%).
                     ${ai.note || ""}
                 `;
 
@@ -772,8 +772,8 @@ document
                 aiGenDot.className = "ai-dot " + genLevel;
 
                 aiGenBlockBody.innerHTML = `
-                    <span class="ai-prob">${genPct}% avg AI-generated probability</span>
-                    Across ${aiGen.frames_analyzed || 0} sampled frames (peak ${Math.round((aiGen.max_frame_ai_generated_probability||0)*100)}%).
+                    <span class="ai-prob">${genPct}% median AI-generated probability</span>
+                    Across ${aiGen.frames_analyzed || 0} sampled frames (mean ${Math.round((aiGen.mean_frame_ai_generated_probability||0)*100)}%, peak ${Math.round((aiGen.max_frame_ai_generated_probability||0)*100)}%).
                     ${aiGen.note || ""}
                 `;
 
