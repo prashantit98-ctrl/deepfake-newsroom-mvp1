@@ -6,3 +6,4 @@ ffmpeg-python
 opencv-python
 pillow
 huggingface_hub==1.20.1
+yt-dlp
