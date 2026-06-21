@@ -374,6 +374,7 @@
     .ai-dot.low{ background: var(--signal); box-shadow: 0 0 8px var(--signal); }
     .ai-dot.medium{ background: var(--amber); box-shadow: 0 0 8px var(--amber); }
     .ai-dot.high{ background: var(--rose); box-shadow: 0 0 8px var(--rose); }
+    .ai-dot.info{ background: #60a5fa; box-shadow: 0 0 8px #60a5fa; }
 
     .ai-block-body{
         font-size: 13px;
@@ -619,9 +620,17 @@
         <div class="ai-block" id="aiBlock" style="display:none;">
             <div class="ai-block-header">
                 <span class="ai-dot" id="aiDot"></span>
-                <span>AI Classifier Result</span>
+                <span>Face-Deepfake Classifier</span>
             </div>
             <div class="ai-block-body" id="aiBlockBody"></div>
+        </div>
+
+        <div class="ai-block" id="aiGenBlock" style="display:none;">
+            <div class="ai-block-header">
+                <span class="ai-dot" id="aiGenDot"></span>
+                <span>AI-Generation Classifier</span>
+            </div>
+            <div class="ai-block-body" id="aiGenBlockBody"></div>
         </div>
 
     </div>
@@ -734,8 +743,45 @@ document
             }else{
 
                 aiBlock.style.display = "block";
-                aiDot.className = "ai-dot";
+
+                if(ai.no_face_detected){
+                    aiDot.className = "ai-dot info";
+                }else{
+                    aiDot.className = "ai-dot";
+                }
+
                 aiBlockBody.innerText = ai.note || "AI detection was not run for this analysis.";
+
+            }
+
+            const aiGenBlock = document.getElementById("aiGenBlock");
+            const aiGenBlockBody = document.getElementById("aiGenBlockBody");
+            const aiGenDot = document.getElementById("aiGenDot");
+            const aiGen = report.ai_generation_detection || {};
+
+            if(aiGen.ran){
+
+                aiGenBlock.style.display = "block";
+
+                const genPct = Math.round((aiGen.ai_generated_probability || 0) * 100);
+
+                let genLevel = "low";
+                if(genPct >= 70){ genLevel = "high"; }
+                else if(genPct >= 40){ genLevel = "medium"; }
+
+                aiGenDot.className = "ai-dot " + genLevel;
+
+                aiGenBlockBody.innerHTML = `
+                    <span class="ai-prob">${genPct}% avg AI-generated probability</span>
+                    Across ${aiGen.frames_analyzed || 0} sampled frames (peak ${Math.round((aiGen.max_frame_ai_generated_probability||0)*100)}%).
+                    ${aiGen.note || ""}
+                `;
+
+            }else{
+
+                aiGenBlock.style.display = "block";
+                aiGenDot.className = "ai-dot";
+                aiGenBlockBody.innerText = aiGen.note || "AI-generation check was not run for this analysis.";
 
             }
 
