@@ -305,6 +305,41 @@
         color: var(--signal);
     }
 
+    .progress-wrap{
+        margin-top: 14px;
+    }
+
+    .progress-track{
+        width: 100%;
+        height: 6px;
+        background: var(--panel-raised);
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        overflow: hidden;
+    }
+
+    .progress-fill{
+        height: 100%;
+        width: 0%;
+        background: linear-gradient(90deg, var(--signal-dim), var(--signal));
+        box-shadow: 0 0 10px rgba(94,234,212,0.5);
+        border-radius: 4px;
+        transition: width 0.4s ease;
+    }
+
+    .progress-meta{
+        display: flex;
+        justify-content: space-between;
+        margin-top: 8px;
+        font-family: var(--mono);
+        font-size: 11.5px;
+        color: var(--text-faint);
+    }
+
+    #progressStage{
+        color: var(--text-dim);
+    }
+
     /* ---------- Metrics ---------- */
 
     .metrics{
@@ -690,6 +725,16 @@
             <span id="statusText">Waiting for upload</span>
         </div>
 
+        <div class="progress-wrap" id="progressWrap" style="display:none;">
+            <div class="progress-track">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div class="progress-meta">
+                <span id="progressStage">Starting…</span>
+                <span id="progressTime"></span>
+            </div>
+        </div>
+
     </div>
 
     <div class="metrics">
@@ -962,6 +1007,93 @@ document.getElementById("urlTabBtn").addEventListener("click", () => {
     document.getElementById("urlHint").style.display = "block";
 });
 
+// ---------- Progress simulation ----------
+//
+// The backend does everything in one request/response — there's no
+// real "percent done" signal coming from the server. This simulates
+// progress through realistic stages instead of leaving the status
+// line static for what can be 30-100+ seconds (Reality Defender's
+// polling is the slow part). Estimates are intentionally generous
+// (biased toward the slower end) so the bar doesn't finish early and
+// then sit there awkwardly waiting for the real response.
+
+const PROGRESS_STAGES = [
+    { label: "Extracting frames…",              seconds: 4  },
+    { label: "Running face-deepfake check…",     seconds: 8  },
+    { label: "Running AI-generation check…",     seconds: 8  },
+    { label: "Checking with Reality Defender…",  seconds: 45 },
+    { label: "Finalizing report…",               seconds: 4  },
+];
+
+const PROGRESS_TOTAL_SECONDS = PROGRESS_STAGES.reduce((sum, s) => sum + s.seconds, 0);
+
+let progressTimer = null;
+
+function startProgressSimulation(){
+
+    const fill = document.getElementById("progressFill");
+    const stageLabel = document.getElementById("progressStage");
+    const timeLabel = document.getElementById("progressTime");
+    document.getElementById("progressWrap").style.display = "block";
+
+    let elapsed = 0;
+    fill.style.width = "0%";
+
+    progressTimer = setInterval(() => {
+
+        elapsed += 1;
+
+        // Find which stage we're in based on cumulative elapsed time.
+        let cumulative = 0;
+        let currentStage = PROGRESS_STAGES[PROGRESS_STAGES.length - 1].label;
+
+        for(const stage of PROGRESS_STAGES){
+            cumulative += stage.seconds;
+            if(elapsed <= cumulative){
+                currentStage = stage.label;
+                break;
+            }
+        }
+
+        // Cap displayed progress at 96% — it should never visually
+        // hit 100% before the real response arrives, since that
+        // would look "done" while still waiting.
+        const pct = Math.min(96, Math.round((elapsed / PROGRESS_TOTAL_SECONDS) * 100));
+        const remaining = Math.max(0, PROGRESS_TOTAL_SECONDS - elapsed);
+
+        fill.style.width = pct + "%";
+        stageLabel.innerText = currentStage;
+        timeLabel.innerText = remaining > 0
+            ? `~${remaining}s remaining`
+            : "almost done…";
+
+    }, 1000);
+}
+
+function stopProgressSimulation(success){
+
+    if(progressTimer){
+        clearInterval(progressTimer);
+        progressTimer = null;
+    }
+
+    const fill = document.getElementById("progressFill");
+    const stageLabel = document.getElementById("progressStage");
+    const timeLabel = document.getElementById("progressTime");
+
+    if(success){
+        fill.style.width = "100%";
+        stageLabel.innerText = "Done";
+        timeLabel.innerText = "";
+    }
+
+    // Hide the bar a moment after completion rather than yanking it
+    // away instantly — gives a brief, satisfying "filled" state.
+    setTimeout(() => {
+        document.getElementById("progressWrap").style.display = "none";
+    }, success ? 800 : 0);
+}
+
 // ---------- File upload submit ----------
 
 document
@@ -982,6 +1114,7 @@ document
         statusEl.classList.add("active");
         statusText.innerText = "Analyzing video...";
         submitBtn.disabled = true;
+        startProgressSimulation();
 
         const fd = new FormData();
 
@@ -1009,10 +1142,12 @@ document
             renderReport(data);
 
             statusText.innerText = "Analysis complete";
+            stopProgressSimulation(true);
 
         }catch(err){
 
             statusText.innerText = err.message || "Analysis failed — check the file and try again.";
+            stopProgressSimulation(false);
 
         }finally{
 
@@ -1046,6 +1181,7 @@ document
         statusEl.classList.add("active");
         statusText.innerText = "Downloading video from link...";
         urlSubmitBtn.disabled = true;
+        startProgressSimulation();
 
         const url = document.getElementById("videoUrl").value;
 
@@ -1065,16 +1201,23 @@ document
                 throw new Error(errData.detail || "Could not analyze this link.");
             }
 
+            // The download already finished by the time fetch() resolves
+            // (the backend does download → analyze → respond as one call),
+            // so the progress bar reflects the analysis stages retroactively
+            // — not perfectly accurate timing, but better than no feedback
+            // at all for what was likely the longest part of the wait.
             statusText.innerText = "Analyzing video...";
 
             const data = await response.json();
             renderReport(data);
 
             statusText.innerText = "Analysis complete";
+            stopProgressSimulation(true);
 
         }catch(err){
 
             statusText.innerText = err.message || "Analysis failed — check the link and try again.";
+            stopProgressSimulation(false);
 
         }finally{
 
