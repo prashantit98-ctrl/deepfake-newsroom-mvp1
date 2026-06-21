@@ -29,17 +29,33 @@ def _contains_face(image_path):
     what it was ever trained to classify. Gating on face presence
     avoids reporting a confident-looking number for content the model
     was never built to judge.
+
+    Tuned to reduce false-positive face detections on non-face content
+    (e.g. animal fur/textures triggering the cascade): minSize is set
+    relative to the frame's own dimensions rather than a fixed pixel
+    size, and minNeighbors is raised so a match needs more overlapping
+    detections to count — both make the cascade meaningfully stricter
+    about what it accepts as a real face.
     """
     image = cv2.imread(image_path)
     if image is None:
         return False
 
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    height, width = gray.shape[:2]
+
+    # A real face in a frame meant for face analysis usually takes up
+    # a meaningful chunk of the image — at least ~12% of the smaller
+    # dimension. This filters out small textured patches that a fixed
+    # 40x40px threshold would let through on a high-res frame.
+    min_dim = int(min(height, width) * 0.12)
+    min_dim = max(min_dim, 40)
+
     faces = _FACE_CASCADE.detectMultiScale(
         gray,
         scaleFactor=1.1,
-        minNeighbors=5,
-        minSize=(40, 40)
+        minNeighbors=8,
+        minSize=(min_dim, min_dim)
     )
     return len(faces) > 0
 
@@ -155,6 +171,18 @@ def _run_classifier(frame_paths, model_id, positive_labels, require_face=False):
             "positive_probability": None
         }
 
+    # Median is the primary score: it resists a single outlier frame
+    # (e.g. one frame the model is wildly, wrongly confident about)
+    # dragging the whole video's score up or down. Mean is kept as
+    # supplementary context since it's still informative when scores
+    # are fairly consistent across frames.
+    sorted_scores = sorted(positive_scores)
+    n = len(sorted_scores)
+    if n % 2 == 1:
+        median_score = sorted_scores[n // 2]
+    else:
+        median_score = (sorted_scores[n // 2 - 1] + sorted_scores[n // 2]) / 2
+
     avg_score = sum(positive_scores) / len(positive_scores)
     max_score = max(positive_scores)
 
@@ -162,7 +190,8 @@ def _run_classifier(frame_paths, model_id, positive_labels, require_face=False):
         "available": True,
         "error": None,
         "frame_results": frame_results,
-        "positive_probability": round(avg_score, 4),
+        "positive_probability": round(median_score, 4),
+        "mean_frame_probability": round(avg_score, 4),
         "max_frame_probability": round(max_score, 4),
         "frames_analyzed": len(positive_scores),
         "frames_skipped_no_face": no_face_count
