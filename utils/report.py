@@ -209,14 +209,20 @@ def generate_report(metadata, transcript, frames, video_path=None, ai_result=Non
             ai_section["note"] = f"AI detection encountered an error: {ai_result['error']}"
         else:
             fake_probability = ai_result.get("positive_probability")
+            mean_fake_probability = ai_result.get("mean_frame_probability")
             max_fake_probability = ai_result.get("max_frame_probability")
 
             ai_section = {
                 "ran": True,
                 "fake_probability": fake_probability,
+                "mean_frame_fake_probability": mean_fake_probability,
                 "max_frame_fake_probability": max_fake_probability,
                 "frames_analyzed": ai_result.get("frames_analyzed"),
-                "note": "Pretrained ViT face-deepfake classifier, run per sampled frame and averaged."
+                "note": (
+                    "Pretrained ViT face-deepfake classifier, run per sampled frame. "
+                    "Primary score is the median across frames (resists a single "
+                    "outlier frame skewing the result)."
+                )
             }
 
             if fake_probability is not None:
@@ -253,19 +259,22 @@ def generate_report(metadata, transcript, frames, video_path=None, ai_result=Non
             ai_generation_section["note"] = f"AI-generation check encountered an error: {ai_generation_result['error']}"
         else:
             ai_gen_probability = ai_generation_result.get("positive_probability")
+            mean_ai_gen_probability = ai_generation_result.get("mean_frame_probability")
             max_ai_gen_probability = ai_generation_result.get("max_frame_probability")
 
             ai_generation_section = {
                 "ran": True,
                 "ai_generated_probability": ai_gen_probability,
+                "mean_frame_ai_generated_probability": mean_ai_gen_probability,
                 "max_frame_ai_generated_probability": max_ai_gen_probability,
                 "frames_analyzed": ai_generation_result.get("frames_analyzed"),
                 "note": (
-                    "General AI-vs-real image classifier, run per sampled frame and "
-                    "averaged. Not face-specific — covers content the face-deepfake "
-                    "check has to skip. This model's own card notes some users have "
-                    "reported overfitting during evaluation — treat as a screening "
-                    "aid, same as the other checks."
+                    "General AI-vs-real image classifier, run per sampled frame. "
+                    "Primary score is the median across frames (resists a single "
+                    "outlier frame skewing the result). Not face-specific — covers "
+                    "content the face-deepfake check has to skip. This model's own "
+                    "card notes some users have reported overfitting during "
+                    "evaluation — treat as a screening aid, same as the other checks."
                 )
             }
 
