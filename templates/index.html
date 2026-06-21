@@ -131,11 +131,82 @@
         to{ left: 100%; }
     }
 
+    .source-tabs{
+        display: flex;
+        gap: 4px;
+        margin-bottom: 18px;
+        border-bottom: 1px solid var(--border-soft);
+        padding-bottom: 0;
+    }
+
+    .source-tab{
+        font-family: var(--mono);
+        font-size: 12px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        background: none;
+        border: none;
+        color: var(--text-faint);
+        padding: 10px 4px 12px;
+        margin-right: 20px;
+        cursor: pointer;
+        position: relative;
+        transition: color 0.15s;
+    }
+
+    .source-tab:hover{
+        color: var(--text-dim);
+    }
+
+    .source-tab.active{
+        color: var(--signal);
+    }
+
+    .source-tab.active::after{
+        content: "";
+        position: absolute;
+        bottom: -1px;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: var(--signal);
+        box-shadow: 0 0 8px var(--signal);
+    }
+
     #uploadForm{
         display: flex;
         align-items: center;
         gap: 14px;
         flex-wrap: wrap;
+    }
+
+    #urlForm{
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        flex-wrap: wrap;
+    }
+
+    #videoUrl{
+        flex: 1;
+        min-width: 240px;
+        background: var(--panel-raised);
+        border: 1px solid var(--border);
+        color: var(--text);
+        font-family: var(--mono);
+        font-size: 13px;
+        padding: 11px 14px;
+        border-radius: 6px;
+        outline: none;
+        transition: border-color 0.15s;
+    }
+
+    #videoUrl::placeholder{
+        color: var(--text-faint);
+    }
+
+    #videoUrl:focus{
+        border-color: var(--signal-dim);
     }
 
     .file-input-wrap{
@@ -564,6 +635,11 @@
 
     <div class="upload-box" id="uploadBox">
 
+        <div class="source-tabs">
+            <button type="button" class="source-tab active" id="fileTabBtn">Upload File</button>
+            <button type="button" class="source-tab" id="urlTabBtn">X (Twitter) Link</button>
+        </div>
+
         <form id="uploadForm">
 
             <div class="file-input-wrap">
@@ -572,6 +648,21 @@
 
             <button type="submit" id="submitBtn">
                 Analyze Video
+            </button>
+
+        </form>
+
+        <form id="urlForm" style="display:none;">
+
+            <input
+                type="url"
+                id="videoUrl"
+                placeholder="https://x.com/username/status/..."
+                required
+            >
+
+            <button type="submit" id="urlSubmitBtn">
+                Analyze Link
             </button>
 
         </form>
@@ -655,6 +746,165 @@
 
 <script>
 
+function renderReport(data){
+
+    const report = data.report || {};
+
+    const frames =
+        report.frames_analyzed || {};
+
+    document.getElementById("filename").innerText =
+        data.filename || "—";
+
+    document.getElementById("risk").innerText =
+        report.risk_level || "LOW";
+
+    document.getElementById("score").innerText =
+        (report.risk_score || 0) + "/100";
+
+    document.getElementById("totalFrames").innerText =
+        frames.total_frames || 0;
+
+    document.getElementById("savedFrames").innerText =
+        frames.saved_frames || 0;
+
+    document.getElementById("summary").innerText =
+        report.summary ||
+        "No summary generated.";
+
+    const aiBlock = document.getElementById("aiBlock");
+    const aiBlockBody = document.getElementById("aiBlockBody");
+    const aiDot = document.getElementById("aiDot");
+    const ai = report.ai_detection || {};
+
+    if(ai.ran){
+
+        aiBlock.style.display = "block";
+
+        const pct = Math.round((ai.fake_probability || 0) * 100);
+
+        let level = "low";
+        if(pct >= 70){ level = "high"; }
+        else if(pct >= 40){ level = "medium"; }
+
+        aiDot.className = "ai-dot " + level;
+
+        aiBlockBody.innerHTML = `
+            <span class="ai-prob">${pct}% median fake probability</span>
+            Across ${ai.frames_analyzed || 0} sampled frames (mean ${Math.round((ai.mean_frame_fake_probability||0)*100)}%, peak ${Math.round((ai.max_frame_fake_probability||0)*100)}%).
+            ${ai.note || ""}
+        `;
+
+    }else{
+
+        aiBlock.style.display = "block";
+
+        if(ai.no_face_detected){
+            aiDot.className = "ai-dot info";
+        }else{
+            aiDot.className = "ai-dot";
+        }
+
+        aiBlockBody.innerText = ai.note || "AI detection was not run for this analysis.";
+
+    }
+
+    const aiGenBlock = document.getElementById("aiGenBlock");
+    const aiGenBlockBody = document.getElementById("aiGenBlockBody");
+    const aiGenDot = document.getElementById("aiGenDot");
+    const aiGen = report.ai_generation_detection || {};
+
+    if(aiGen.ran){
+
+        aiGenBlock.style.display = "block";
+
+        const genPct = Math.round((aiGen.ai_generated_probability || 0) * 100);
+
+        let genLevel = "low";
+        if(genPct >= 70){ genLevel = "high"; }
+        else if(genPct >= 40){ genLevel = "medium"; }
+
+        aiGenDot.className = "ai-dot " + genLevel;
+
+        aiGenBlockBody.innerHTML = `
+            <span class="ai-prob">${genPct}% median AI-generated probability</span>
+            Across ${aiGen.frames_analyzed || 0} sampled frames (mean ${Math.round((aiGen.mean_frame_ai_generated_probability||0)*100)}%, peak ${Math.round((aiGen.max_frame_ai_generated_probability||0)*100)}%).
+            ${aiGen.note || ""}
+        `;
+
+    }else{
+
+        aiGenBlock.style.display = "block";
+        aiGenDot.className = "ai-dot";
+        aiGenBlockBody.innerText = aiGen.note || "AI-generation check was not run for this analysis.";
+
+    }
+
+    const riskCard =
+        document.getElementById("riskCard");
+
+    riskCard.className = "card risk-card";
+
+    if(report.risk_level === "LOW"){
+        riskCard.classList.add("risk-low");
+    }
+    else if(report.risk_level === "MEDIUM"){
+        riskCard.classList.add("risk-medium");
+    }
+    else{
+        riskCard.classList.add("risk-high");
+    }
+
+    let html = "";
+
+    const sampleUrls =
+        frames.sample_urls || [];
+
+    if(sampleUrls.length === 0){
+
+        html =
+            '<span class="frames-empty">No sample frames available.</span>';
+
+    }else{
+
+        sampleUrls.forEach(url => {
+
+            const label = url.split("/").pop();
+
+            html += `
+                <button class="frame-thumb" data-url="${url}" data-label="${label}">
+                    <img src="${url}" alt="Extracted frame ${label}" loading="lazy">
+                    <span class="frame-label">${label}</span>
+                </button>
+            `;
+
+        });
+
+    }
+
+    document.getElementById("frameList")
+        .innerHTML = html;
+
+}
+
+// ---------- Source tab switching ----------
+
+document.getElementById("fileTabBtn").addEventListener("click", () => {
+    document.getElementById("fileTabBtn").classList.add("active");
+    document.getElementById("urlTabBtn").classList.remove("active");
+    document.getElementById("uploadForm").style.display = "flex";
+    document.getElementById("urlForm").style.display = "none";
+});
+
+document.getElementById("urlTabBtn").addEventListener("click", () => {
+    document.getElementById("urlTabBtn").classList.add("active");
+    document.getElementById("fileTabBtn").classList.remove("active");
+    document.getElementById("urlForm").style.display = "flex";
+    document.getElementById("uploadForm").style.display = "none";
+});
+
+// ---------- File upload submit ----------
+
 document
 .getElementById("uploadForm")
 .addEventListener(
@@ -691,150 +941,19 @@ document
                 }
             );
 
+            if(!response.ok){
+                const errData = await response.json().catch(() => ({}));
+                throw new Error(errData.detail || "Analysis failed.");
+            }
+
             const data = await response.json();
-
-            const report = data.report || {};
-
-            const frames =
-                report.frames_analyzed || {};
-
-            document.getElementById("filename").innerText =
-                data.filename || "—";
-
-            document.getElementById("risk").innerText =
-                report.risk_level || "LOW";
-
-            document.getElementById("score").innerText =
-                (report.risk_score || 0) + "/100";
-
-            document.getElementById("totalFrames").innerText =
-                frames.total_frames || 0;
-
-            document.getElementById("savedFrames").innerText =
-                frames.saved_frames || 0;
-
-            document.getElementById("summary").innerText =
-                report.summary ||
-                "No summary generated.";
-
-            const aiBlock = document.getElementById("aiBlock");
-            const aiBlockBody = document.getElementById("aiBlockBody");
-            const aiDot = document.getElementById("aiDot");
-            const ai = report.ai_detection || {};
-
-            if(ai.ran){
-
-                aiBlock.style.display = "block";
-
-                const pct = Math.round((ai.fake_probability || 0) * 100);
-
-                let level = "low";
-                if(pct >= 70){ level = "high"; }
-                else if(pct >= 40){ level = "medium"; }
-
-                aiDot.className = "ai-dot " + level;
-
-                aiBlockBody.innerHTML = `
-                    <span class="ai-prob">${pct}% median fake probability</span>
-                    Across ${ai.frames_analyzed || 0} sampled frames (mean ${Math.round((ai.mean_frame_fake_probability||0)*100)}%, peak ${Math.round((ai.max_frame_fake_probability||0)*100)}%).
-                    ${ai.note || ""}
-                `;
-
-            }else{
-
-                aiBlock.style.display = "block";
-
-                if(ai.no_face_detected){
-                    aiDot.className = "ai-dot info";
-                }else{
-                    aiDot.className = "ai-dot";
-                }
-
-                aiBlockBody.innerText = ai.note || "AI detection was not run for this analysis.";
-
-            }
-
-            const aiGenBlock = document.getElementById("aiGenBlock");
-            const aiGenBlockBody = document.getElementById("aiGenBlockBody");
-            const aiGenDot = document.getElementById("aiGenDot");
-            const aiGen = report.ai_generation_detection || {};
-
-            if(aiGen.ran){
-
-                aiGenBlock.style.display = "block";
-
-                const genPct = Math.round((aiGen.ai_generated_probability || 0) * 100);
-
-                let genLevel = "low";
-                if(genPct >= 70){ genLevel = "high"; }
-                else if(genPct >= 40){ genLevel = "medium"; }
-
-                aiGenDot.className = "ai-dot " + genLevel;
-
-                aiGenBlockBody.innerHTML = `
-                    <span class="ai-prob">${genPct}% median AI-generated probability</span>
-                    Across ${aiGen.frames_analyzed || 0} sampled frames (mean ${Math.round((aiGen.mean_frame_ai_generated_probability||0)*100)}%, peak ${Math.round((aiGen.max_frame_ai_generated_probability||0)*100)}%).
-                    ${aiGen.note || ""}
-                `;
-
-            }else{
-
-                aiGenBlock.style.display = "block";
-                aiGenDot.className = "ai-dot";
-                aiGenBlockBody.innerText = aiGen.note || "AI-generation check was not run for this analysis.";
-
-            }
-
-            const riskCard =
-                document.getElementById("riskCard");
-
-            riskCard.className = "card risk-card";
-
-            if(report.risk_level === "LOW"){
-                riskCard.classList.add("risk-low");
-            }
-            else if(report.risk_level === "MEDIUM"){
-                riskCard.classList.add("risk-medium");
-            }
-            else{
-                riskCard.classList.add("risk-high");
-            }
-
-            let html = "";
-
-            const sampleUrls =
-                frames.sample_urls || [];
-
-            if(sampleUrls.length === 0){
-
-                html =
-                    '<span class="frames-empty">No sample frames available.</span>';
-
-            }else{
-
-                sampleUrls.forEach(url => {
-
-                    const label = url.split("/").pop();
-
-                    html += `
-                        <button class="frame-thumb" data-url="${url}" data-label="${label}">
-                            <img src="${url}" alt="Extracted frame ${label}" loading="lazy">
-                            <span class="frame-label">${label}</span>
-                        </button>
-                    `;
-
-                });
-
-            }
-
-            document.getElementById("frameList")
-                .innerHTML = html;
+            renderReport(data);
 
             statusText.innerText = "Analysis complete";
 
         }catch(err){
 
-            statusText.innerText = "Analysis failed — check the file and try again.";
+            statusText.innerText = err.message || "Analysis failed — check the file and try again.";
 
         }finally{
 
@@ -842,6 +961,68 @@ document
             statusEl.classList.remove("active");
             statusEl.classList.add("done");
             submitBtn.disabled = false;
+
+        }
+
+    }
+);
+
+// ---------- URL submit (X / Twitter) ----------
+
+document
+.getElementById("urlForm")
+.addEventListener(
+    "submit",
+    async (e)=>{
+
+        e.preventDefault();
+
+        const uploadBox = document.getElementById("uploadBox");
+        const statusEl = document.getElementById("status");
+        const statusText = document.getElementById("statusText");
+        const urlSubmitBtn = document.getElementById("urlSubmitBtn");
+
+        uploadBox.classList.add("scanning");
+        statusEl.classList.remove("done");
+        statusEl.classList.add("active");
+        statusText.innerText = "Downloading video from link...";
+        urlSubmitBtn.disabled = true;
+
+        const url = document.getElementById("videoUrl").value;
+
+        try{
+
+            const response = await fetch(
+                "/analyze-url",
+                {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ url })
+                }
+            );
+
+            if(!response.ok){
+                const errData = await response.json().catch(() => ({}));
+                throw new Error(errData.detail || "Could not analyze this link.");
+            }
+
+            statusText.innerText = "Analyzing video...";
+
+            const data = await response.json();
+            renderReport(data);
+
+            statusText.innerText = "Analysis complete";
+
+        }catch(err){
+
+            statusText.innerText = err.message || "Analysis failed — check the link and try again.";
+
+        }finally{
+
+            uploadBox.classList.remove("scanning");
+            statusEl.classList.remove("active");
+            statusEl.classList.add("done");
+            urlSubmitBtn.disabled = false;
 
         }
 
