@@ -94,18 +94,20 @@ def _check_edge_density_variance(frames):
     return float(np.std(densities))
 
 
-def generate_report(metadata, transcript, frames, video_path=None, ai_result=None):
+def generate_report(metadata, transcript, frames, video_path=None, ai_result=None, ai_generation_result=None):
     """
     Produces a screening report combining:
     1. Heuristic checks (metadata, compression, frame consistency, edge variance)
-    2. AI-based deepfake classification (if ai_result is provided)
+    2. Face-specific AI deepfake classification (if ai_result is provided)
+    3. General AI-image-generation classification (if ai_generation_result is provided)
 
     IMPORTANT: the heuristic checks are signal-based only and do NOT
-    confirm manipulation on their own. The AI component (when available)
-    is a real pretrained classifier, but per its own model card it is
-    trained on a specific dataset and may not generalize to all
-    deepfake methods, especially newer ones. Treat the combined result
-    as a strong starting point for manual review, not a final verdict.
+    confirm manipulation on their own. The AI components (when available)
+    are real pretrained classifiers, but per their own model cards each
+    is trained on a specific dataset and may not generalize to all
+    manipulation/generation methods, especially newer ones. Treat the
+    combined result as a strong starting point for manual review, not
+    a final verdict.
     """
 
     risk_score = 0
@@ -181,49 +183,110 @@ def generate_report(metadata, transcript, frames, video_path=None, ai_result=Non
     else:
         findings.append("Pixel-level checks skipped (video file unavailable)")
 
-    # --- AI-based deepfake classification ---
+    # --- Face-specific AI deepfake classification ---
     ai_section = {
         "ran": False,
         "fake_probability": None,
-        "note": "AI detection not run for this analysis."
+        "note": "AI face-deepfake detection not run for this analysis."
     }
 
     if ai_result and ai_result.get("available"):
-        if ai_result.get("error"):
+        if ai_result.get("no_face_detected"):
+            ai_section = {
+                "ran": False,
+                "no_face_detected": True,
+                "fake_probability": None,
+                "note": (
+                    "No human face was detected in any sampled frame, so the face "
+                    "deepfake classifier was skipped. This model is trained on human "
+                    "faces only — running it on content without a clear face (animals, "
+                    "objects, landscapes, etc.) would produce a meaningless score. "
+                    "See the general AI-generation check below instead."
+                )
+            }
+            findings.append("No face detected — face-deepfake classifier skipped as not applicable")
+        elif ai_result.get("error"):
             ai_section["note"] = f"AI detection encountered an error: {ai_result['error']}"
         else:
-            fake_probability = ai_result.get("fake_probability")
-            max_fake_probability = ai_result.get("max_frame_fake_probability")
+            fake_probability = ai_result.get("positive_probability")
+            max_fake_probability = ai_result.get("max_frame_probability")
 
             ai_section = {
                 "ran": True,
                 "fake_probability": fake_probability,
                 "max_frame_fake_probability": max_fake_probability,
                 "frames_analyzed": ai_result.get("frames_analyzed"),
-                "note": "Pretrained ViT deepfake classifier, run per sampled frame and averaged."
+                "note": "Pretrained ViT face-deepfake classifier, run per sampled frame and averaged."
             }
 
             if fake_probability is not None:
                 # AI signal carries real weight, but is capped so a single
                 # model's opinion doesn't *alone* push risk to HIGH —
                 # combined with heuristics for the final score.
-                ai_contribution = round(fake_probability * 60)
+                ai_contribution = round(fake_probability * 50)
                 risk_score += ai_contribution
 
                 if fake_probability >= 0.7:
                     findings.append(
-                        f"AI classifier flagged high deepfake probability (avg {fake_probability:.0%} across sampled frames)"
+                        f"Face-deepfake classifier flagged high probability (avg {fake_probability:.0%} across sampled frames)"
                     )
                 elif fake_probability >= 0.4:
                     findings.append(
-                        f"AI classifier flagged moderate deepfake probability (avg {fake_probability:.0%} across sampled frames)"
+                        f"Face-deepfake classifier flagged moderate probability (avg {fake_probability:.0%} across sampled frames)"
                     )
                 else:
                     findings.append(
-                        f"AI classifier found low deepfake probability (avg {fake_probability:.0%} across sampled frames)"
+                        f"Face-deepfake classifier found low probability (avg {fake_probability:.0%} across sampled frames)"
                     )
     elif ai_result and not ai_result.get("available"):
         ai_section["note"] = ai_result.get("error", "AI detection unavailable.")
+
+    # --- General AI-image-generation classification ---
+    ai_generation_section = {
+        "ran": False,
+        "ai_generated_probability": None,
+        "note": "General AI-generation check not run for this analysis."
+    }
+
+    if ai_generation_result and ai_generation_result.get("available"):
+        if ai_generation_result.get("error"):
+            ai_generation_section["note"] = f"AI-generation check encountered an error: {ai_generation_result['error']}"
+        else:
+            ai_gen_probability = ai_generation_result.get("positive_probability")
+            max_ai_gen_probability = ai_generation_result.get("max_frame_probability")
+
+            ai_generation_section = {
+                "ran": True,
+                "ai_generated_probability": ai_gen_probability,
+                "max_frame_ai_generated_probability": max_ai_gen_probability,
+                "frames_analyzed": ai_generation_result.get("frames_analyzed"),
+                "note": (
+                    "General AI-vs-real image classifier, run per sampled frame and "
+                    "averaged. Not face-specific — covers content the face-deepfake "
+                    "check has to skip. This model's own card notes some users have "
+                    "reported overfitting during evaluation — treat as a screening "
+                    "aid, same as the other checks."
+                )
+            }
+
+            if ai_gen_probability is not None:
+                ai_gen_contribution = round(ai_gen_probability * 50)
+                risk_score += ai_gen_contribution
+
+                if ai_gen_probability >= 0.7:
+                    findings.append(
+                        f"AI-generation classifier flagged high probability of AI-generated content (avg {ai_gen_probability:.0%} across sampled frames)"
+                    )
+                elif ai_gen_probability >= 0.4:
+                    findings.append(
+                        f"AI-generation classifier flagged moderate probability of AI-generated content (avg {ai_gen_probability:.0%} across sampled frames)"
+                    )
+                else:
+                    findings.append(
+                        f"AI-generation classifier found low probability of AI-generated content (avg {ai_gen_probability:.0%} across sampled frames)"
+                    )
+    elif ai_generation_result and not ai_generation_result.get("available"):
+        ai_generation_section["note"] = ai_generation_result.get("error", "AI-generation check unavailable.")
 
     risk_score = min(risk_score, 100)
 
@@ -237,7 +300,8 @@ def generate_report(metadata, transcript, frames, video_path=None, ai_result=Non
     summary = (
         f"{total_frames} frames analyzed. {saved_frames} key frames extracted. "
         f"{len(findings)} checks completed. "
-        + ("AI deepfake classifier included. " if ai_section["ran"] else "")
+        + ("Face-deepfake classifier included. " if ai_section["ran"] else "")
+        + ("AI-generation classifier included. " if ai_generation_section["ran"] else "")
         + "Results are a screening aid, not a verdict — manual review still advised."
     )
 
@@ -258,7 +322,8 @@ def generate_report(metadata, transcript, frames, video_path=None, ai_result=Non
         "frames_analyzed": frames,
         "findings": findings,
         "ai_detection": ai_section,
+        "ai_generation_detection": ai_generation_section,
         "summary": summary,
         "recommendation": recommendation,
-        "disclaimer": "Combines heuristic screening with an AI classifier. Neither confirms authenticity with certainty — treat as a screening aid, not a verdict."
+        "disclaimer": "Combines heuristic screening with two AI classifiers (face-deepfake and general AI-generation). None of these confirm authenticity with certainty — treat as a screening aid, not a verdict."
     }
