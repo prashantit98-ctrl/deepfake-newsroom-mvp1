@@ -94,7 +94,7 @@ def _check_edge_density_variance(frames):
     return float(np.std(densities))
 
 
-def generate_report(metadata, transcript, frames, video_path=None, ai_result=None, ai_generation_result=None):
+def generate_report(metadata, transcript, frames, video_path=None, ai_result=None, ai_generation_result=None, reality_defender_result=None):
     """
     Produces a screening report combining:
     1. Heuristic checks (metadata, compression, frame consistency, edge variance)
@@ -297,6 +297,58 @@ def generate_report(metadata, transcript, frames, video_path=None, ai_result=Non
     elif ai_generation_result and not ai_generation_result.get("available"):
         ai_generation_section["note"] = ai_generation_result.get("error", "AI-generation check unavailable.")
 
+    # --- Reality Defender (third-party commercial check) ---
+    reality_defender_section = {
+        "ran": False,
+        "manipulation_probability": None,
+        "note": "Reality Defender check not run for this analysis."
+    }
+
+    if reality_defender_result and reality_defender_result.get("available"):
+        if reality_defender_result.get("error"):
+            reality_defender_section["note"] = f"Reality Defender check encountered an error: {reality_defender_result['error']}"
+        else:
+            rd_probability = reality_defender_result.get("positive_probability")
+            mean_rd_probability = reality_defender_result.get("mean_frame_probability")
+            max_rd_probability = reality_defender_result.get("max_frame_probability")
+
+            reality_defender_section = {
+                "ran": True,
+                "manipulation_probability": rd_probability,
+                "mean_frame_manipulation_probability": mean_rd_probability,
+                "max_frame_manipulation_probability": max_rd_probability,
+                "frames_analyzed": reality_defender_result.get("frames_analyzed"),
+                "note": (
+                    "Reality Defender commercial multi-model ensemble, run on a "
+                    "capped subset of sampled frames (free-tier quota limited). "
+                    "A third, independently-trained opinion alongside the other "
+                    "two checks — not a higher-authority verdict, just another "
+                    "data point."
+                )
+            }
+
+            if rd_probability is not None:
+                # Weighted slightly lower than the other two AI checks since
+                # it only sees a small capped subset of frames (quota limits),
+                # not the full sampled set.
+                rd_contribution = round(rd_probability * 40)
+                risk_score += rd_contribution
+
+                if rd_probability >= 0.7:
+                    findings.append(
+                        f"Reality Defender flagged high manipulation probability (median {rd_probability:.0%} across checked frames)"
+                    )
+                elif rd_probability >= 0.4:
+                    findings.append(
+                        f"Reality Defender flagged moderate manipulation probability (median {rd_probability:.0%} across checked frames)"
+                    )
+                else:
+                    findings.append(
+                        f"Reality Defender found low manipulation probability (median {rd_probability:.0%} across checked frames)"
+                    )
+    elif reality_defender_result and not reality_defender_result.get("available"):
+        reality_defender_section["note"] = reality_defender_result.get("error", "Reality Defender check unavailable.")
+
     risk_score = min(risk_score, 100)
 
     if risk_score <= 20:
@@ -311,6 +363,7 @@ def generate_report(metadata, transcript, frames, video_path=None, ai_result=Non
         f"{len(findings)} checks completed. "
         + ("Face-deepfake classifier included. " if ai_section["ran"] else "")
         + ("AI-generation classifier included. " if ai_generation_section["ran"] else "")
+        + ("Reality Defender check included. " if reality_defender_section["ran"] else "")
         + "Results are a screening aid, not a verdict — manual review still advised."
     )
 
@@ -332,7 +385,8 @@ def generate_report(metadata, transcript, frames, video_path=None, ai_result=Non
         "findings": findings,
         "ai_detection": ai_section,
         "ai_generation_detection": ai_generation_section,
+        "reality_defender_detection": reality_defender_section,
         "summary": summary,
         "recommendation": recommendation,
-        "disclaimer": "Combines heuristic screening with two AI classifiers (face-deepfake and general AI-generation). None of these confirm authenticity with certainty — treat as a screening aid, not a verdict."
+        "disclaimer": "Combines heuristic screening with three independent checks (face-deepfake classifier, general AI-generation classifier, and Reality Defender). None of these confirm authenticity with certainty — treat as a screening aid, not a verdict."
     }
