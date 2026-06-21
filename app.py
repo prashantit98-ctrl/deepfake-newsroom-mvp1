@@ -9,7 +9,7 @@ from fastapi.templating import Jinja2Templates
 from utils.metadata import get_metadata
 from utils.video import extract_frames
 from utils.report import generate_report
-from utils.ai_detection import analyze_frames_for_deepfake
+from utils.ai_detection import analyze_frames_for_deepfake, analyze_frames_for_ai_generation
 
 app = FastAPI()
 
@@ -74,19 +74,25 @@ async def analyze(
         metadata = get_metadata(path)
         frame_data = extract_frames(path, upload_id)
 
-        # Run the AI classifier on the frames already saved as thumbnails
+        # Run both AI checks on the frames already saved as thumbnails
         # (no need to re-read the video — these JPGs are already on disk).
+        # - Face deepfake check: only meaningful on frames with a face
+        # - AI-generation check: runs on every frame, no face needed,
+        #   so it covers content the face check has to skip (animals,
+        #   food, objects, landscapes, etc.)
         sample_paths = [
             f"outputs/frames/{name}" for name in frame_data.get("samples", [])
         ]
         ai_result = analyze_frames_for_deepfake(sample_paths)
+        ai_generation_result = analyze_frames_for_ai_generation(sample_paths)
 
         report = generate_report(
             metadata,
             "Transcription disabled",
             frame_data,
             video_path=path,
-            ai_result=ai_result
+            ai_result=ai_result,
+            ai_generation_result=ai_generation_result
         )
     finally:
         # The original video isn't needed after frames are extracted —
