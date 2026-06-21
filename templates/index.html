@@ -742,6 +742,14 @@
             <div class="ai-block-body" id="aiGenBlockBody"></div>
         </div>
 
+        <div class="ai-block" id="rdBlock" style="display:none;">
+            <div class="ai-block-header">
+                <span class="ai-dot" id="rdDot"></span>
+                <span>Reality Defender</span>
+            </div>
+            <div class="ai-block-body" id="rdBlockBody"></div>
+        </div>
+
     </div>
 
     <div class="frames">
@@ -855,6 +863,37 @@ function renderReport(data){
         aiGenBlock.style.display = "block";
         aiGenDot.className = "ai-dot";
         aiGenBlockBody.innerText = aiGen.note || "AI-generation check was not run for this analysis.";
+
+    }
+
+    const rdBlock = document.getElementById("rdBlock");
+    const rdBlockBody = document.getElementById("rdBlockBody");
+    const rdDot = document.getElementById("rdDot");
+    const rd = report.reality_defender_detection || {};
+
+    if(rd.ran){
+
+        rdBlock.style.display = "block";
+
+        const rdPct = Math.round((rd.manipulation_probability || 0) * 100);
+
+        let rdLevel = "low";
+        if(rdPct >= 70){ rdLevel = "high"; }
+        else if(rdPct >= 40){ rdLevel = "medium"; }
+
+        rdDot.className = "ai-dot " + rdLevel;
+
+        rdBlockBody.innerHTML = `
+            <span class="ai-prob">${rdPct}% median manipulation probability</span>
+            Across ${rd.frames_analyzed || 0} checked frames (mean ${Math.round((rd.mean_frame_manipulation_probability||0)*100)}%, peak ${Math.round((rd.max_frame_manipulation_probability||0)*100)}%).
+            ${rd.note || ""}
+        `;
+
+    }else{
+
+        rdBlock.style.display = "block";
+        rdDot.className = "ai-dot";
+        rdBlockBody.innerText = rd.note || "Reality Defender check was not run for this analysis.";
 
     }
 
