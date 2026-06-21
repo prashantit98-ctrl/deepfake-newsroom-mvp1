@@ -6,14 +6,26 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 from utils.metadata import get_metadata
 from utils.video import extract_frames
 from utils.report import generate_report
 from utils.ai_detection import analyze_frames_for_deepfake, analyze_frames_for_ai_generation
+from utils.reality_defender_detection import analyze_frames_with_reality_defender
 from utils.url_download import download_video_from_url
 
 app = FastAPI()
+
+# Basic abuse protection: caps how often any single IP can hit the
+# expensive endpoints. In-memory by default (fine for a single
+# Railway instance) — resets on restart, which is an acceptable
+# tradeoff for a screening-tool MVP, not a high-security system.
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 templates = Jinja2Templates(
     directory="templates"
@@ -37,6 +49,17 @@ ALLOWED_CONTENT_TYPES = {
     "video/webm",
     "video/x-matroska",
 }
+
+# Caps how large an uploaded file can be before we reject it. This is
+# a screening tool, not a media archive — 200MB comfortably covers a
+# few minutes of normal phone/WhatsApp video while protecting the
+# server (and the Hugging Face free-tier quota) from huge uploads.
+MAX_UPLOAD_BYTES = 200 * 1024 * 1024  # 200MB
+
+# How many analyze requests a single IP can make per minute. Generous
+# enough for normal use (nobody legitimately analyzes 10 videos a
+# minute), tight enough to blunt accidental or deliberate abuse.
+ANALYZE_RATE_LIMIT = "10/minute"
 
 
 class UrlAnalyzeRequest(BaseModel):
@@ -78,6 +101,7 @@ def _run_full_analysis(path, upload_id):
     ]
     ai_result = analyze_frames_for_deepfake(sample_paths)
     ai_generation_result = analyze_frames_for_ai_generation(sample_paths)
+    reality_defender_result = analyze_frames_with_reality_defender(sample_paths)
 
     report = generate_report(
         metadata,
@@ -85,7 +109,8 @@ def _run_full_analysis(path, upload_id):
         frame_data,
         video_path=path,
         ai_result=ai_result,
-        ai_generation_result=ai_generation_result
+        ai_generation_result=ai_generation_result,
+        reality_defender_result=reality_defender_result
     )
 
     samples = frame_data.get("samples", [])
@@ -96,7 +121,9 @@ def _run_full_analysis(path, upload_id):
 
 
 @app.post("/analyze")
+@limiter.limit(ANALYZE_RATE_LIMIT)
 async def analyze(
+    request: Request,
     file: UploadFile = File(...)
 ):
     # Reject obviously-wrong file types before doing any work.
@@ -112,8 +139,29 @@ async def analyze(
     ext = os.path.splitext(file.filename)[1]
     path = f"uploads/{upload_id}{ext}"
 
-    with open(path, "wb") as f:
-        f.write(await file.read())
+    # Stream the upload to disk in chunks, checking size as we go,
+    # so an oversized file gets rejected mid-stream rather than fully
+    # written to disk first and rejected only afterward.
+    total_bytes = 0
+    chunk_size = 1024 * 1024  # 1MB
+
+    try:
+        with open(path, "wb") as f:
+            while True:
+                chunk = await file.read(chunk_size)
+                if not chunk:
+                    break
+                total_bytes += len(chunk)
+                if total_bytes > MAX_UPLOAD_BYTES:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"File too large. Maximum allowed size is {MAX_UPLOAD_BYTES // (1024*1024)}MB."
+                    )
+                f.write(chunk)
+    except HTTPException:
+        if os.path.exists(path):
+            os.remove(path)
+        raise
 
     try:
         report = _run_full_analysis(path, upload_id)
@@ -131,7 +179,9 @@ async def analyze(
 
 
 @app.post("/analyze-url")
+@limiter.limit(ANALYZE_RATE_LIMIT)
 async def analyze_url(
+    request: Request,
     payload: UrlAnalyzeRequest
 ):
     # Downloads the video via yt-dlp, then runs it through the exact
@@ -141,6 +191,16 @@ async def analyze_url(
         path, display_name, upload_id = download_video_from_url(payload.url)
     except RuntimeError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+    # Downloaded videos get the same size cap as direct uploads —
+    # yt-dlp's format_sort already favors 720p, but a long video at
+    # that resolution can still be large, so this is a real backstop.
+    if os.path.exists(path) and os.path.getsize(path) > MAX_UPLOAD_BYTES:
+        os.remove(path)
+        raise HTTPException(
+            status_code=413,
+            detail=f"Downloaded video is too large. Maximum allowed size is {MAX_UPLOAD_BYTES // (1024*1024)}MB."
+        )
 
     try:
         report = _run_full_analysis(path, upload_id)
