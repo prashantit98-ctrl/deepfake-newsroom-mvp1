@@ -5,6 +5,7 @@ from fastapi import FastAPI, Request, UploadFile, File, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -164,7 +165,15 @@ async def analyze(
         raise
 
     try:
-        report = _run_full_analysis(path, upload_id)
+        # Run the slow, blocking analysis (frame extraction, Hugging
+        # Face calls, Reality Defender polling — all synchronous) in a
+        # background thread instead of directly on the event loop.
+        # Without this, a single slow analysis blocks EVERY other
+        # request this server can handle — including someone just
+        # trying to load the homepage — since there's only one worker
+        # process. This keeps the server responsive to other requests
+        # while a long analysis runs.
+        report = await run_in_threadpool(_run_full_analysis, path, upload_id)
     finally:
         # The original video isn't needed after frames are extracted —
         # remove it so uploads/ doesn't grow forever.
@@ -203,7 +212,7 @@ async def analyze_url(
         )
 
     try:
-        report = _run_full_analysis(path, upload_id)
+        report = await run_in_threadpool(_run_full_analysis, path, upload_id)
     finally:
         if os.path.exists(path):
             os.remove(path)
