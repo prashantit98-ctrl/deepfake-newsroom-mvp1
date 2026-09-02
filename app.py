@@ -65,6 +65,7 @@ ANALYZE_RATE_LIMIT = "10/minute"
 
 class UrlAnalyzeRequest(BaseModel):
     url: str
+    enable_face_check: bool = True
 
 
 @app.get(
@@ -80,27 +81,39 @@ async def home(
     )
 
 
-def _run_full_analysis(path, upload_id):
+def _run_full_analysis(path, upload_id, enable_face_check=True):
     """
     Shared analysis pipeline used by both the file-upload and URL
     endpoints, so a fix made to one path never silently misses the
     other. Does NOT delete the video file — callers are responsible
     for cleanup, since the two endpoints get the file onto disk in
     different ways.
+
+    enable_face_check: if False, the face-deepfake classifier is
+    skipped entirely. Useful when the video has no human faces —
+    the classifier was trained on faces only, and running it on
+    non-face content produces unreliable high-risk scores.
     """
     metadata = get_metadata(path)
     frame_data = extract_frames(path, upload_id)
 
-    # Run both AI checks on the frames already saved as thumbnails
-    # (no need to re-read the video — these JPGs are already on disk).
-    # - Face deepfake check: only meaningful on frames with a face
-    # - AI-generation check: runs on every frame, no face needed,
-    #   so it covers content the face check has to skip (animals,
-    #   food, objects, landscapes, etc.)
     sample_paths = [
         f"outputs/frames/{name}" for name in frame_data.get("samples", [])
     ]
-    ai_result = analyze_frames_for_deepfake(sample_paths)
+
+    # Run the face-deepfake check only if the user opted in.
+    # Skipping it when the video has no faces reduces false positives
+    # without affecting the other two checks which still run regardless.
+    if enable_face_check:
+        ai_result = analyze_frames_for_deepfake(sample_paths)
+    else:
+        ai_result = {
+            "available": False,
+            "error": "Face-deepfake check was disabled by the user for this analysis.",
+            "frame_results": [],
+            "positive_probability": None
+        }
+
     ai_generation_result = analyze_frames_for_ai_generation(sample_paths)
     reality_defender_result = analyze_frames_with_reality_defender(sample_paths)
 
@@ -125,7 +138,8 @@ def _run_full_analysis(path, upload_id):
 @limiter.limit(ANALYZE_RATE_LIMIT)
 async def analyze(
     request: Request,
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),
+    enable_face_check: str = "true"
 ):
     # Reject obviously-wrong file types before doing any work.
     if file.content_type not in ALLOWED_CONTENT_TYPES:
@@ -133,6 +147,8 @@ async def analyze(
             status_code=400,
             detail=f"Unsupported file type: {file.content_type}. Please upload a video."
         )
+
+    run_face_check = enable_face_check.lower() != "false"
 
     # One ID shared by this upload's video file and its frame folder,
     # so frames from different uploads never mix or collide.
@@ -165,18 +181,8 @@ async def analyze(
         raise
 
     try:
-        # Run the slow, blocking analysis (frame extraction, Hugging
-        # Face calls, Reality Defender polling — all synchronous) in a
-        # background thread instead of directly on the event loop.
-        # Without this, a single slow analysis blocks EVERY other
-        # request this server can handle — including someone just
-        # trying to load the homepage — since there's only one worker
-        # process. This keeps the server responsive to other requests
-        # while a long analysis runs.
-        report = await run_in_threadpool(_run_full_analysis, path, upload_id)
+        report = await run_in_threadpool(_run_full_analysis, path, upload_id, run_face_check)
     finally:
-        # The original video isn't needed after frames are extracted —
-        # remove it so uploads/ doesn't grow forever.
         if os.path.exists(path):
             os.remove(path)
 
@@ -212,7 +218,7 @@ async def analyze_url(
         )
 
     try:
-        report = await run_in_threadpool(_run_full_analysis, path, upload_id)
+        report = await run_in_threadpool(_run_full_analysis, path, upload_id, payload.enable_face_check)
     finally:
         if os.path.exists(path):
             os.remove(path)
