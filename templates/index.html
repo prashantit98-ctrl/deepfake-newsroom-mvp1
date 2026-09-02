@@ -221,6 +221,44 @@
         font-weight: 600;
     }
 
+    .check-options{
+        margin-top: 16px;
+        padding-top: 14px;
+        border-top: 1px solid var(--border-soft);
+    }
+
+    .check-toggle{
+        display: flex;
+        align-items: flex-start;
+        gap: 10px;
+        cursor: pointer;
+    }
+
+    .check-toggle input[type="checkbox"]{
+        margin-top: 2px;
+        accent-color: var(--signal);
+        width: 15px;
+        height: 15px;
+        flex-shrink: 0;
+        cursor: pointer;
+    }
+
+    .toggle-label{
+        font-family: var(--mono);
+        font-size: 12.5px;
+        color: var(--text-dim);
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+    }
+
+    .toggle-hint{
+        font-family: var(--sans);
+        font-size: 11.5px;
+        color: var(--text-faint);
+        font-weight: 400;
+    }
+
     .file-input-wrap{
         position: relative;
         display: inline-flex;
@@ -714,6 +752,16 @@
 
         </form>
 
+        <div class="check-options">
+            <label class="check-toggle">
+                <input type="checkbox" id="enableFaceCheck" checked>
+                <span class="toggle-label">
+                    Face-deepfake check
+                    <span class="toggle-hint">Uncheck if video has no human faces — reduces false positives on non-face content</span>
+                </span>
+            </label>
+        </div>
+
         <p class="url-hint" id="urlHint" style="display:none;">
             Tip: a regular tweet link often gets blocked by X. For the most reliable result,
             right-click the video on X and choose <strong>"Copy video address"</strong>
@@ -1123,6 +1171,9 @@ document
             document.getElementById("videoFile").files[0]
         );
 
+        const enableFaceCheck = document.getElementById("enableFaceCheck").checked;
+        fd.append("enable_face_check", enableFaceCheck ? "true" : "false");
+
         try{
 
             const response = await fetch(
@@ -1184,6 +1235,7 @@ document
         startProgressSimulation();
 
         const url = document.getElementById("videoUrl").value;
+        const enableFaceCheckUrl = document.getElementById("enableFaceCheck").checked;
 
         try{
 
@@ -1192,7 +1244,7 @@ document
                 {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ url })
+                    body: JSON.stringify({ url, enable_face_check: enableFaceCheckUrl })
                 }
             );
 
