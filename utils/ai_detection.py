@@ -13,7 +13,6 @@ try:
     )
 except Exception:
     _FACE_CASCADE = None
-)
 
 
 def _get_client():
@@ -24,11 +23,6 @@ def _get_client():
 
 
 def _contains_face(image_path):
-    """
-    Checks whether at least one human face is detectable in the frame.
-    Falls back to True (let frame through) if CascadeClassifier
-    is unavailable in this environment, so the app doesn't crash.
-    """
     if _FACE_CASCADE is None:
         return True
     image = cv2.imread(image_path)
@@ -48,39 +42,12 @@ def _contains_face(image_path):
 
 
 def _query_model(image_path, model_id):
-    """
-    Sends one image to the given Hugging Face model via the current
-    huggingface_hub InferenceClient.
-
-    The client wants binary bytes, a local file path, or a URL —
-    not a PIL Image object — so we pass the path string directly
-    and let the client handle reading and content-type detection.
-
-    Returns a list like:
-    [{"label": "Deepfake", "score": 0.91}, {"label": "Realism", "score": 0.09}]
-    """
     client = _get_client()
     result = client.image_classification(image_path, model=model_id)
-
     return [{"label": r.label, "score": r.score} for r in result]
 
 
 def _run_classifier(frame_paths, model_id, positive_labels, require_face=False):
-    """
-    Shared logic for running any single-model image classifier across
-    a list of frames and aggregating a "positive" probability (e.g.
-    "this frame is fake" or "this frame is AI-generated").
-
-    positive_labels: lowercase label strings that count as the
-    "positive" class for this model (different models use different
-    wording — "Deepfake" vs "ai", etc.)
-
-    require_face: if True, frames with no detected face are skipped
-    (used for the face-specific deepfake model). If False, every
-    frame is sent regardless of face presence (used for the general
-    AI-generation check, which isn't face-specific).
-    """
-
     if not HF_TOKEN:
         return {
             "available": False,
@@ -158,11 +125,6 @@ def _run_classifier(frame_paths, model_id, positive_labels, require_face=False):
             "positive_probability": None
         }
 
-    # Median is the primary score: it resists a single outlier frame
-    # (e.g. one frame the model is wildly, wrongly confident about)
-    # dragging the whole video's score up or down. Mean is kept as
-    # supplementary context since it's still informative when scores
-    # are fairly consistent across frames.
     sorted_scores = sorted(positive_scores)
     n = len(sorted_scores)
     if n % 2 == 1:
@@ -186,11 +148,6 @@ def _run_classifier(frame_paths, model_id, positive_labels, require_face=False):
 
 
 def analyze_frames_for_deepfake(frame_paths):
-    """
-    Face-specific deepfake check. Only runs on frames where a human
-    face is detected — this model was trained on faces only, so
-    faceless frames are skipped rather than given a meaningless score.
-    """
     return _run_classifier(
         frame_paths,
         model_id=FACE_DEEPFAKE_MODEL_ID,
@@ -200,18 +157,6 @@ def analyze_frames_for_deepfake(frame_paths):
 
 
 def analyze_frames_for_ai_generation(frame_paths):
-    """
-    General AI-generation check. Runs on every sampled frame
-    regardless of whether a face is present — this model was trained
-    broadly on AI-generated vs. real images (art, photos, objects,
-    scenes), not specifically on faces, so it's the right tool for
-    content the face-deepfake model has to skip (animals, food,
-    landscapes, objects, etc.).
-
-    NOTE: the model card for this classifier notes some users have
-    reported overfitting during evaluation — treat its output with
-    the same "screening aid, not verdict" skepticism as the face model.
-    """
     return _run_classifier(
         frame_paths,
         model_id=AI_GENERATED_MODEL_ID,
