@@ -7,8 +7,12 @@ FACE_DEEPFAKE_MODEL_ID = "prithivMLmods/Deep-Fake-Detector-v2-Model"
 AI_GENERATED_MODEL_ID = "Ateeqq/ai-vs-human-image-detector"
 HF_TOKEN = os.environ.get("HF_API_TOKEN")
 
-_FACE_CASCADE = cv2.CascadeClassifier(
-    cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+try:
+    _FACE_CASCADE = cv2.CascadeClassifier(
+        cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+    )
+except Exception:
+    _FACE_CASCADE = None
 )
 
 
@@ -22,35 +26,18 @@ def _get_client():
 def _contains_face(image_path):
     """
     Checks whether at least one human face is detectable in the frame.
-
-    The face-deepfake model was trained specifically on human face
-    images — feeding it frames with no face (animals, landscapes,
-    objects) produces meaningless scores, since the input is outside
-    what it was ever trained to classify. Gating on face presence
-    avoids reporting a confident-looking number for content the model
-    was never built to judge.
-
-    Tuned to reduce false-positive face detections on non-face content
-    (e.g. animal fur/textures triggering the cascade): minSize is set
-    relative to the frame's own dimensions rather than a fixed pixel
-    size, and minNeighbors is raised so a match needs more overlapping
-    detections to count — both make the cascade meaningfully stricter
-    about what it accepts as a real face.
+    Falls back to True (let frame through) if CascadeClassifier
+    is unavailable in this environment, so the app doesn't crash.
     """
+    if _FACE_CASCADE is None:
+        return True
     image = cv2.imread(image_path)
     if image is None:
         return False
-
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     height, width = gray.shape[:2]
-
-    # A real face in a frame meant for face analysis usually takes up
-    # a meaningful chunk of the image — at least ~12% of the smaller
-    # dimension. This filters out small textured patches that a fixed
-    # 40x40px threshold would let through on a high-res frame.
     min_dim = int(min(height, width) * 0.12)
     min_dim = max(min_dim, 40)
-
     faces = _FACE_CASCADE.detectMultiScale(
         gray,
         scaleFactor=1.1,
