@@ -100,6 +100,7 @@ def generate_report(metadata, transcript, frames, video_path=None, ai_result=Non
     1. Heuristic checks (metadata, compression, frame consistency, edge variance)
     2. Face-specific AI deepfake classification (if ai_result is provided)
     3. General AI-image-generation classification (if ai_generation_result is provided)
+    4. Reality Defender third-party check (if reality_defender_result is provided)
 
     IMPORTANT: the heuristic checks are signal-based only and do NOT
     confirm manipulation on their own. The AI components (when available)
@@ -226,10 +227,11 @@ def generate_report(metadata, transcript, frames, video_path=None, ai_result=Non
             }
 
             if fake_probability is not None:
-                # AI signal carries real weight, but is capped so a single
-                # model's opinion doesn't *alone* push risk to HIGH —
-                # combined with heuristics for the final score.
-                ai_contribution = round(fake_probability * 50)
+                # Weight reduced from 50 to 25: with Reality Defender now
+                # available as a stronger, independently-verified signal,
+                # this classifier's opinion is capped further so it can't
+                # alone push risk into HIGH when Reality Defender disagrees.
+                ai_contribution = round(fake_probability * 25)
                 risk_score += ai_contribution
 
                 if fake_probability >= 0.7:
@@ -279,15 +281,14 @@ def generate_report(metadata, transcript, frames, video_path=None, ai_result=Non
             }
 
             if ai_gen_probability is not None:
-                # Weight reduced from 50 to 10 based on observed behaviour:
+                # Weight reduced from 10 to 5 based on observed behaviour:
                 # this model consistently scores 100% on real human face video
                 # (confirmed genuine, confirmed by Reality Defender at 1%),
                 # which is a documented overfitting issue on its own model card.
-                # At weight 10, even a 100% score adds only 10 points — enough
-                # to nudge the score slightly without dominating the result.
-                # Reality Defender and the face-deepfake classifier carry the
-                # main evidential weight instead.
-                ai_gen_contribution = round(ai_gen_probability * 10)
+                # At weight 5, even a 100% score adds only 5 points — barely
+                # nudges the total. Reality Defender carries the main
+                # evidential weight instead.
+                ai_gen_contribution = round(ai_gen_probability * 5)
                 risk_score += ai_gen_contribution
 
                 if ai_gen_probability >= 0.7:
@@ -329,17 +330,20 @@ def generate_report(metadata, transcript, frames, video_path=None, ai_result=Non
                 "note": (
                     "Reality Defender commercial multi-model ensemble, run on a "
                     "capped subset of sampled frames (free-tier quota limited). "
-                    "A third, independently-trained opinion alongside the other "
-                    "two checks — not a higher-authority verdict, just another "
-                    "data point."
+                    "Weighted highest of the three AI checks: it is the most "
+                    "reliable independently-verified signal observed so far, "
+                    "while the other two classifiers have documented overfitting "
+                    "issues on their own model cards."
                 )
             }
 
             if rd_probability is not None:
-                # Weighted slightly lower than the other two AI checks since
-                # it only sees a small capped subset of frames (quota limits),
-                # not the full sampled set.
-                rd_contribution = round(rd_probability * 40)
+                # Weight increased from 40 to 60: Reality Defender is treated
+                # as the most trustworthy of the three AI signals, since the
+                # face-deepfake and AI-generation classifiers have both shown
+                # overfitting behaviour (high scores on confirmed-genuine
+                # content) that Reality Defender did not replicate.
+                rd_contribution = round(rd_probability * 60)
                 risk_score += rd_contribution
 
                 if rd_probability >= 0.7:
