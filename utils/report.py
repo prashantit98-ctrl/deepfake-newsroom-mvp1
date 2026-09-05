@@ -279,7 +279,15 @@ def generate_report(metadata, transcript, frames, video_path=None, ai_result=Non
             }
 
             if ai_gen_probability is not None:
-                ai_gen_contribution = round(ai_gen_probability * 50)
+                # Weight reduced from 50 to 10 based on observed behaviour:
+                # this model consistently scores 100% on real human face video
+                # (confirmed genuine, confirmed by Reality Defender at 1%),
+                # which is a documented overfitting issue on its own model card.
+                # At weight 10, even a 100% score adds only 10 points — enough
+                # to nudge the score slightly without dominating the result.
+                # Reality Defender and the face-deepfake classifier carry the
+                # main evidential weight instead.
+                ai_gen_contribution = round(ai_gen_probability * 10)
                 risk_score += ai_gen_contribution
 
                 if ai_gen_probability >= 0.7:
