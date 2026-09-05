@@ -3,21 +3,23 @@ import cv2
 from huggingface_hub import InferenceClient
 from huggingface_hub.errors import HfHubHTTPError
 
-# --- Model config ---
-# Labels confirmed directly from each model's config.json on Hugging Face.
-# Do NOT change these model IDs without re-checking their id2label mapping —
-# mismatched label strings are what caused every score to read as 100 before.
-
+# --- Face-deepfake model: run LOCALLY, not via hosted Inference API ---
+# Reason: essentially no community-trained deepfake classifier (this one
+# included) is deployed on Hugging Face's Inference Providers. Confirmed
+# directly on the model's own page: "This model isn't deployed by any
+# Inference Provider." Calling it through InferenceClient will always
+# 400 with "Model not supported by provider hf-inference", regardless of
+# provider="auto" -- there's no provider hosting it to route to.
+# Loading it locally with transformers sidesteps that entirely.
 FACE_DEEPFAKE_MODEL_ID = "prithivMLmods/Deep-Fake-Detector-Model"
-FACE_DEEPFAKE_POSITIVE_LABELS = {"fake"}  # this model's labels are "Real" / "Fake"
+FACE_DEEPFAKE_POSITIVE_LABELS = {"fake"}  # confirmed labels: "Real" / "Fake"
 
-# Ateeqq/ai-vs-human-image-detector is NOT hosted on HF Inference Providers
-# (confirmed via an open community request asking for it to be supported),
-# so InferenceClient calls to it will always fail regardless of provider
-# setting. Swapped to Organika/sdxl-detector, which IS hosted and actively
-# used. Its labels are "artificial" / "human".
+# --- AI-generation model: stays on the hosted Inference API ---
+# Organika/sdxl-detector IS confirmed deployed on Inference Providers
+# (it's a long-established, frequently-forked model), so this one is
+# fine to call remotely.
 AI_GENERATED_MODEL_ID = "Organika/sdxl-detector"
-AI_GENERATED_POSITIVE_LABELS = {"artificial"}
+AI_GENERATED_POSITIVE_LABELS = {"artificial"}  # confirmed labels: "artificial" / "human"
 
 HF_TOKEN = os.environ.get("HF_API_TOKEN")
 
@@ -55,14 +57,45 @@ def _contains_face(image_path):
     return len(faces) > 0
 
 
-def _query_model(image_path, model_id):
+# --- Local (in-process) model loading for the face-deepfake classifier ---
+# Loaded once at import time and reused across requests, rather than
+# reloading per-frame or per-request. First load downloads the weights
+# (~350MB) and will be slow; subsequent calls are fast.
+_local_pipeline = None
+_local_pipeline_error = None
+
+
+def _get_local_pipeline():
+    global _local_pipeline, _local_pipeline_error
+    if _local_pipeline is not None or _local_pipeline_error is not None:
+        return _local_pipeline, _local_pipeline_error
+    try:
+        from transformers import pipeline
+        _local_pipeline = pipeline(
+            "image-classification",
+            model=FACE_DEEPFAKE_MODEL_ID
+        )
+    except Exception as e:
+        _local_pipeline_error = str(e)
+    return _local_pipeline, _local_pipeline_error
+
+
+def _query_local_model(image_path):
+    pipe, err = _get_local_pipeline()
+    if pipe is None:
+        raise RuntimeError(err or "Local model failed to load.")
+    result = pipe(image_path)
+    return [{"label": r["label"], "score": r["score"]} for r in result]
+
+
+def _query_hosted_model(image_path, model_id):
     client = _get_client()
     result = client.image_classification(image_path, model=model_id)
     return [{"label": r.label, "score": r.score} for r in result]
 
 
-def _run_classifier(frame_paths, model_id, positive_labels, require_face=False):
-    if not HF_TOKEN:
+def _run_classifier(frame_paths, positive_labels, require_face=False, use_local=False, model_id=None):
+    if not use_local and not HF_TOKEN:
         return {
             "available": False,
             "error": "HF_API_TOKEN is not set. AI detection skipped.",
@@ -83,12 +116,15 @@ def _run_classifier(frame_paths, model_id, positive_labels, require_face=False):
             frame_results.append({
                 "frame": os.path.basename(path),
                 "skipped": True,
-                "reason": "No face detected — frame skipped from this check"
+                "reason": "No face detected -- frame skipped from this check"
             })
             continue
 
         try:
-            result = _query_model(path, model_id)
+            if use_local:
+                result = _query_local_model(path)
+            else:
+                result = _query_hosted_model(path, model_id)
         except HfHubHTTPError as e:
             frame_results.append({
                 "frame": os.path.basename(path),
@@ -102,9 +138,6 @@ def _run_classifier(frame_paths, model_id, positive_labels, require_face=False):
             })
             continue
 
-        # Raw labels/scores kept in the response so mismatched label
-        # strings are visible immediately in the report instead of
-        # silently producing garbage probabilities.
         positive_entry = next(
             (r for r in result if r["label"].lower() in positive_labels), None
         )
@@ -168,28 +201,31 @@ def _run_classifier(frame_paths, model_id, positive_labels, require_face=False):
 
 def analyze_frames_for_deepfake(frame_paths):
     """
-    Runs the face-specific deepfake classifier on a list of frame image
-    paths. Requires a detected face per frame (skips frames without one).
+    Runs the face-specific deepfake classifier LOCALLY (in-process, not via
+    the Hugging Face hosted Inference API) on a list of frame image paths.
+    Requires a detected face per frame (skips frames without one).
     Returns a dict matching the shape generate_report() expects for
     ai_result.
     """
     return _run_classifier(
         frame_paths,
-        FACE_DEEPFAKE_MODEL_ID,
         FACE_DEEPFAKE_POSITIVE_LABELS,
-        require_face=True
+        require_face=True,
+        use_local=True
     )
 
 
 def analyze_frames_for_ai_generation(frame_paths):
     """
-    Runs the general AI-vs-real image classifier on a list of frame image
-    paths. Not face-specific, so no face requirement. Returns a dict
-    matching the shape generate_report() expects for ai_generation_result.
+    Runs the general AI-vs-real image classifier via the hosted Hugging
+    Face Inference API on a list of frame image paths. Not face-specific,
+    so no face requirement. Returns a dict matching the shape
+    generate_report() expects for ai_generation_result.
     """
     return _run_classifier(
         frame_paths,
-        AI_GENERATED_MODEL_ID,
         AI_GENERATED_POSITIVE_LABELS,
-        require_face=False
+        require_face=False,
+        use_local=False,
+        model_id=AI_GENERATED_MODEL_ID
     )
