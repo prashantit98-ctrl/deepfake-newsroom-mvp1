@@ -3,7 +3,7 @@ import cv2
 from huggingface_hub import InferenceClient
 from huggingface_hub.errors import HfHubHTTPError
 
-FACE_DEEPFAKE_MODEL_ID = "prithivMLmods/Deep-Fake-Detector-v2-Model"
+FACE_DEEPFAKE_MODEL_ID = "prithivMLmods/Deep-Fake-Detector-Model"
 AI_GENERATED_MODEL_ID = "Ateeqq/ai-vs-human-image-detector"
 HF_TOKEN = os.environ.get("HF_API_TOKEN")
 
@@ -151,7 +151,7 @@ def analyze_frames_for_deepfake(frame_paths):
     return _run_classifier(
         frame_paths,
         model_id=FACE_DEEPFAKE_MODEL_ID,
-        positive_labels={"deepfake"},
+        positive_labels={"fake"},
         require_face=True
     )
 
