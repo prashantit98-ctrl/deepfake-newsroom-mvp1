@@ -3,8 +3,22 @@ import cv2
 from huggingface_hub import InferenceClient
 from huggingface_hub.errors import HfHubHTTPError
 
+# --- Model config ---
+# Labels confirmed directly from each model's config.json on Hugging Face.
+# Do NOT change these model IDs without re-checking their id2label mapping —
+# mismatched label strings are what caused every score to read as 100 before.
+
 FACE_DEEPFAKE_MODEL_ID = "prithivMLmods/Deep-Fake-Detector-Model"
-AI_GENERATED_MODEL_ID = "Ateeqq/ai-vs-human-image-detector"
+FACE_DEEPFAKE_POSITIVE_LABELS = {"fake"}  # this model's labels are "Real" / "Fake"
+
+# Ateeqq/ai-vs-human-image-detector is NOT hosted on HF Inference Providers
+# (confirmed via an open community request asking for it to be supported),
+# so InferenceClient calls to it will always fail regardless of provider
+# setting. Swapped to Organika/sdxl-detector, which IS hosted and actively
+# used. Its labels are "artificial" / "human".
+AI_GENERATED_MODEL_ID = "Organika/sdxl-detector"
+AI_GENERATED_POSITIVE_LABELS = {"artificial"}
+
 HF_TOKEN = os.environ.get("HF_API_TOKEN")
 
 try:
@@ -88,6 +102,9 @@ def _run_classifier(frame_paths, model_id, positive_labels, require_face=False):
             })
             continue
 
+        # Raw labels/scores kept in the response so mismatched label
+        # strings are visible immediately in the report instead of
+        # silently producing garbage probabilities.
         positive_entry = next(
             (r for r in result if r["label"].lower() in positive_labels), None
         )
@@ -95,6 +112,7 @@ def _run_classifier(frame_paths, model_id, positive_labels, require_face=False):
 
         frame_results.append({
             "frame": os.path.basename(path),
+            "raw_labels": result,
             "label": result[0]["label"] if result else "Unknown",
             "positive_score": positive_score
         })
@@ -116,7 +134,9 @@ def _run_classifier(frame_paths, model_id, positive_labels, require_face=False):
     if not positive_scores:
         first_error = next(
             (r["error"] for r in frame_results if "error" in r),
-            "No frames could be analyzed."
+            "No frames could be analyzed. Check that positive_labels matches "
+            "this model's actual id2label output (see raw_labels in "
+            "frame_results above for what the model actually returned)."
         )
         return {
             "available": True,
@@ -134,3 +154,42 @@ def _run_classifier(frame_paths, model_id, positive_labels, require_face=False):
 
     avg_score = sum(positive_scores) / len(positive_scores)
     max_score = max(positive_scores)
+
+    return {
+        "available": True,
+        "error": None,
+        "frame_results": frame_results,
+        "frames_analyzed": len(positive_scores),
+        "positive_probability": median_score,
+        "mean_frame_probability": avg_score,
+        "max_frame_probability": max_score
+    }
+
+
+def analyze_frames_for_deepfake(frame_paths):
+    """
+    Runs the face-specific deepfake classifier on a list of frame image
+    paths. Requires a detected face per frame (skips frames without one).
+    Returns a dict matching the shape generate_report() expects for
+    ai_result.
+    """
+    return _run_classifier(
+        frame_paths,
+        FACE_DEEPFAKE_MODEL_ID,
+        FACE_DEEPFAKE_POSITIVE_LABELS,
+        require_face=True
+    )
+
+
+def analyze_frames_for_ai_generation(frame_paths):
+    """
+    Runs the general AI-vs-real image classifier on a list of frame image
+    paths. Not face-specific, so no face requirement. Returns a dict
+    matching the shape generate_report() expects for ai_generation_result.
+    """
+    return _run_classifier(
+        frame_paths,
+        AI_GENERATED_MODEL_ID,
+        AI_GENERATED_POSITIVE_LABELS,
+        require_face=False
+    )
