@@ -17,7 +17,7 @@ except Exception:
 
 def _get_client():
     return InferenceClient(
-        provider="hf-inference",
+        provider="auto",
         api_key=HF_TOKEN
     )
 
@@ -134,32 +134,3 @@ def _run_classifier(frame_paths, model_id, positive_labels, require_face=False):
 
     avg_score = sum(positive_scores) / len(positive_scores)
     max_score = max(positive_scores)
-
-    return {
-        "available": True,
-        "error": None,
-        "frame_results": frame_results,
-        "positive_probability": round(median_score, 4),
-        "mean_frame_probability": round(avg_score, 4),
-        "max_frame_probability": round(max_score, 4),
-        "frames_analyzed": len(positive_scores),
-        "frames_skipped_no_face": no_face_count
-    }
-
-
-def analyze_frames_for_deepfake(frame_paths):
-    return _run_classifier(
-        frame_paths,
-        model_id=FACE_DEEPFAKE_MODEL_ID,
-        positive_labels={"fake"},
-        require_face=True
-    )
-
-
-def analyze_frames_for_ai_generation(frame_paths):
-    return _run_classifier(
-        frame_paths,
-        model_id=AI_GENERATED_MODEL_ID,
-        positive_labels={"ai"},
-        require_face=False
-    )
